@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f16" />
+    <link rel="manifest" href="manifest.webmanifest">
+    <title>Ultimate Sudoku</title>
+
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+    <div class="app">
+        <header class="topbar">
+            <div class="brand">
+                <div class="logo" aria-hidden="true"></div>
+                <div>
+                    <div class="title">Ultimate Sudoku</div>
+                    <div class="subtitle" id="subtitle">Offline • Adaptive difficulty</div>
+                </div>
+            </div>
+
+            <div class="top-actions">
+                <button class="btn ghost" id="btnNew" title="New game">New</button>
+                <button class="btn ghost" id="btnStats" title="Stats">Stats</button>
+                <button class="btn ghost" id="btnMenu" title="Menu">Menu</button>
+            </div>
+        </header>
+
+        <main class="main">
+            <section class="board-wrap">
+                <div class="board-card">
+                    <div class="board-header">
+                        <div class="pill" id="pillMode">Mode: Smart</div>
+                        <div class="pill" id="pillDiff">Difficulty: —</div>
+                        <div class="pill" id="pillTimer">00:00</div>
+                    </div>
+
+                    <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+
+                    <div class="board-footer">
+                        <div class="toggles">
+                            <label class="toggle">
+                                <input type="checkbox" id="toggleConflicts" checked />
+                                <span>Conflicts</span>
+                            </label>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggleAutoNotes" />
+                                <span>Auto-notes</span>
+                            </label>
+                        </div>
+
+                        <div class="mini">
+                            <div class="mini-label">Progress</div>
+                            <div class="mini-bar">
+                                <div class="mini-fill" id="progressFill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="controls">
+                <div class="control-card">
+                    <div class="row">
+                        <button class="btn" id="btnNotes">Notes: Off</button>
+                        <button class="btn" id="btnErase">Erase</button>
+                        <button class="btn" id="btnUndo">Undo</button>
+                        <button class="btn" id="btnRedo">Redo</button>
+                    </div>
+
+                    <div class="keypad" id="keypad" aria-label="Number keypad"></div>
+
+                    <div class="row compact">
+                        <button class="btn ghost" id="btnRestart">Restart</button>
+                        <button class="btn ghost" id="btnPause">Pause</button>
+                        <span class="status" id="statusText">Tap a cell to begin.</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Bottom sheet menu -->
+        <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+        <div class="sheet" id="sheet" aria-hidden="true">
+            <div class="sheet-handle" id="sheetHandle"></div>
+            <div class="sheet-content">
+                <div class="sheet-title">Menu</div>
+
+                <div class="sheet-group">
+                    <div class="sheet-label">New game</div>
+                    <div class="grid-2">
+                        <button class="btn" data-new="smart">Smart (Adaptive)</button>
+                        <button class="btn" data-new="moderate">Moderate</button>
+                        <button class="btn" data-new="hard">Hard</button>
+                        <button class="btn" data-new="pro">Pro</button>
+                    </div>
+                </div>
+
+                <div class="sheet-group">
+                    <div class="sheet-label">Options</div>
+                    <div class="grid-2">
+                        <button class="btn ghost" id="btnClearNotes">Clear notes</button>
+                        <button class="btn ghost" id="btnClearAll">Clear all user input</button>
+                    </div>
+                </div>
+
+                <div class="sheet-group">
+                    <div class="sheet-label">Install</div>
+                    <button class="btn" id="btnInstall" hidden>Install App</button>
+                    <div class="hint" id="installHint">If Install doesn’t appear, your browser may not support
+                        prompt-based install.</div>
+                </div>
+
+                <div class="sheet-group">
+                    <div class="sheet-label">Stats</div>
+                    <div class="stats" id="statsBox"></div>
+                    <button class="btn ghost" id="btnResetStats">Reset stats</button>
+                </div>
+
+                <div class="sheet-group">
+                    <div class="hint">
+                        Tip: “Smart” mode adapts based on your last games: solve time, mistakes, and completion rate.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Win modal -->
+        <div class="modal-backdrop" id="modalBackdrop" hidden></div>
+        <div class="modal" id="modalWin" hidden role="dialog" aria-modal="true" aria-label="Puzzle complete">
+            <div class="modal-title">Puzzle complete</div>
+            <div class="modal-body" id="winBody"></div>
+            <div class="modal-actions">
+                <button class="btn ghost" id="btnCloseWin">Close</button>
+                <button class="btn" id="btnNextSmart">Next (Smart)</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Register service worker
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
+        }
+    </script>
+</body>
+
+</html>
