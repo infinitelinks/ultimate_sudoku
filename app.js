@@ -3,7 +3,7 @@
    - System theme (CSS)
    - Adaptive generator (Smart)
    - Daily Challenge (seeded per date, offline)
-   - Mobile fit: guarantees board + keypad fit in visible viewport (Android)
+   - Mobile fit: board-first sizing so Sudoku always fully visible
 */
 
 const $ = (s) => document.querySelector(s);
@@ -54,12 +54,15 @@ const LS_KEY = "ultimate_sudoku_state_v2";
 const STATS_KEY = "ultimate_sudoku_stats_v2";
 const DAILY_KEY = "ultimate_sudoku_daily_v1";
 
-/* --------------------- Perfect fit sizing --------------------- */
+/* --------------------- Perfect fit sizing (board-first on mobile) --------------------- */
 function setPerfectMobileFitCellSize() {
     const topbar = document.querySelector(".topbar");
     const main = document.querySelector(".main");
     const boardCard = document.querySelector(".board-card");
     const controlsCard = document.querySelector(".control-card");
+    const boardHeader = document.querySelector(".board-header");
+    const boardFooter = document.querySelector(".board-footer");
+
     if (!topbar || !main || !boardCard || !controlsCard) return;
 
     const vvH = window.visualViewport?.height ?? window.innerHeight;
@@ -76,45 +79,38 @@ function setPerfectMobileFitCellSize() {
         return;
     }
 
+    // Mobile: compute available height precisely
     const topH = topbar.getBoundingClientRect().height;
 
-    // available height below header (with cushion for Android bars)
-    const cushion = 14;
+    // cushion helps with Android bars / safe areas
+    const cushion = 12;
     const availableH = vvH - topH - cushion - 10;
 
     const mainStyles = getComputedStyle(main);
     const gap = parseFloat(mainStyles.gap || "10") || 10;
 
-    // width constraint
+    const controlsH = controlsCard.getBoundingClientRect().height;
+
+    // Remaining height for board card (includes header/footer + grid)
+    const boardAllowedH = availableH - gap - controlsH;
+
+    const headerH = boardHeader ? boardHeader.getBoundingClientRect().height : 0;
+    const footerH = boardFooter ? boardFooter.getBoundingClientRect().height : 0;
+
+    // Board inner padding estimate (grid padding + breathing)
+    const boardInnerPad = 18;
+
+    const maxByHeight = Math.floor((boardAllowedH - headerH - footerH - boardInnerPad) / 9);
+
+    // Width constraint
     const sidePadding = 20;
-    const boardPadding = 18;
-    const maxByWidth = Math.floor((vvW - sidePadding - boardPadding) / 9);
+    const boardPad = 18;
+    const maxByWidth = Math.floor((vvW - sidePadding - boardPad) / 9);
 
-    // binary search for max cell that fits total height
-    let lo = 26;
-    let hi = Math.min(56, maxByWidth);
-    let best = lo;
+    let cell = Math.min(maxByWidth, maxByHeight);
+    cell = Math.max(24, Math.min(cell, 54));
 
-    const fits = (cell) => {
-        document.documentElement.style.setProperty("--cell", `${cell}px`);
-        // force reflow
-        void boardCard.offsetHeight;
-        const boardH = boardCard.getBoundingClientRect().height;
-        const controlsH = controlsCard.getBoundingClientRect().height;
-        return (boardH + gap + controlsH) <= availableH;
-    };
-
-    for (let iter = 0; iter < 12; iter++) {
-        const mid = Math.floor((lo + hi) / 2);
-        if (fits(mid)) {
-            best = mid;
-            lo = mid + 1;
-        } else {
-            hi = mid - 1;
-        }
-    }
-
-    document.documentElement.style.setProperty("--cell", `${best}px`);
+    document.documentElement.style.setProperty("--cell", `${cell}px`);
 }
 
 /* --------------------- Seeded RNG (daily) --------------------- */
@@ -694,7 +690,6 @@ function render() {
         if (state.givenMask[i]) cell.classList.add("given");
 
         const v = state.userGrid[i];
-        if (!state.givenMask[i] && v) cell.classList.add("user");
 
         if (sel >= 0) {
             const [sr, sc] = rc(sel);
@@ -971,13 +966,13 @@ function startNewGame(modeOrDiff) {
         state.running = true;
         state.startTs = nowMs();
 
+        // sizing pass
         setPerfectMobileFitCellSize();
-        render();
-        saveState();
+        render(); saveState();
 
-        // second pass (after DOM updated) for exact fit
+        // second pass after DOM paints
         setPerfectMobileFitCellSize();
-        render();
+        render(); saveState();
     }, 20);
 }
 
@@ -1015,11 +1010,10 @@ function startDailyChallenge(dateStr = todayKey()) {
         state.startTs = nowMs();
 
         setPerfectMobileFitCellSize();
-        render();
-        saveState();
+        render(); saveState();
 
         setPerfectMobileFitCellSize();
-        render();
+        render(); saveState();
     }, 20);
 }
 
@@ -1083,7 +1077,7 @@ sheet.addEventListener("click", (e) => {
     startNewGame(btn.getAttribute("data-new"));
 });
 
-btnNotes.addEventListener("click", toggleNotes);
+btnNotes.addEventListener("click", () => { state.notesMode = !state.notesMode; render(); saveState(); });
 btnErase.addEventListener("click", eraseValue);
 btnUndo.addEventListener("click", undo);
 btnRedo.addEventListener("click", redo);
@@ -1092,8 +1086,7 @@ btnRestart.addEventListener("click", restartPuzzle);
 btnPause.addEventListener("click", () => {
     state.running = !state.running;
     if (state.running) state.startTs = nowMs();
-    render();
-    saveState();
+    render(); saveState();
 });
 
 toggleConflicts.addEventListener("change", () => {
@@ -1119,7 +1112,7 @@ btnCloseWin.addEventListener("click", closeWin);
 btnNextSmart.addEventListener("click", () => { closeWin(); startNewGame("smart"); });
 modalBackdrop.addEventListener("click", closeWin);
 
-/* resize recalculation */
+/* Resize recalculation */
 window.addEventListener("resize", () => { setPerfectMobileFitCellSize(); render(); });
 window.visualViewport?.addEventListener("resize", () => { setPerfectMobileFitCellSize(); render(); });
 
@@ -1128,6 +1121,7 @@ function ensureState() {
     buildBoard();
     buildKeypad();
 
+    // size pass
     setPerfectMobileFitCellSize();
 
     const ok = loadState();
@@ -1140,7 +1134,8 @@ function ensureState() {
         state.notes = (state.notes || []).map(s => (s instanceof Set ? s : new Set(s)));
         if (state.notes.length !== 81) state.notes = Array.from({ length: 81 }, () => new Set());
         render();
-        // second pass sizing for exact fit after render
+
+        // second pass after DOM
         setPerfectMobileFitCellSize();
         render();
     }

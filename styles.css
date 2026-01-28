@@ -544,25 +544,28 @@ body {
     margin-top: 12px;
 }
 
-/* ---------- MOBILE-ONLY compact mode (keypad + ui shrink) ---------- */
+/* ---------- MOBILE: board-first fit helpers ---------- */
 @media (max-width: 980px) {
     .main {
         gap: 10px;
         padding: 0 10px 10px;
     }
 
+    /* Slightly smaller header buttons */
     .top-actions .btn {
         padding: 8px 10px;
         border-radius: 12px;
         font-size: 13px;
     }
 
+    /* Controls buttons smaller */
     .control-card .row .btn {
         padding: 8px 10px;
         border-radius: 12px;
         font-size: 13px;
     }
 
+    /* Keypad slightly tighter */
     .keypad {
         gap: 6px;
     }
@@ -581,7 +584,8 @@ body {
         font-size: 11px;
     }
 
+    /* IMPORTANT: tighter board padding so full grid fits */
     .board {
-        padding: 8px;
+        padding: 6px;
     }
 }
