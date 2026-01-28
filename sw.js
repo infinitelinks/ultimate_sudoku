@@ -1,10 +1,4 @@
-/* Ultimate Sudoku PWA - Service Worker (GitHub Pages safe)
-   - App Shell cached for offline
-   - Navigation requests return cached index.html
-   - Cache-first for static assets
-*/
-
-const CACHE_NAME = "ultimate-sudoku-v1";
+const CACHE_NAME = "ultimate-sudoku-v2";
 const APP_SHELL = [
     "./",
     "./index.html",
@@ -13,7 +7,8 @@ const APP_SHELL = [
     "./manifest.webmanifest",
     "./icon.svg",
     "./icon-192.png",
-    "./icon-512.png"
+    "./icon-512.png",
+    "./Ultimate_Sudoku.apk"
 ];
 
 self.addEventListener("install", (event) => {
@@ -35,7 +30,6 @@ self.addEventListener("activate", (event) => {
     );
 });
 
-// Helper: detect navigation (HTML page loads)
 function isNavigationRequest(request) {
     return request.mode === "navigate" ||
         (request.headers.get("accept") || "").includes("text/html");
@@ -45,15 +39,12 @@ self.addEventListener("fetch", (event) => {
     const req = event.request;
     const url = new URL(req.url);
 
-    // Only handle same-origin requests (your GH pages)
     if (url.origin !== self.location.origin) return;
 
-    // Always serve index.html for navigations (offline-safe routing)
     if (isNavigationRequest(req)) {
         event.respondWith(
             (async () => {
                 try {
-                    // Try network first so updates come through when online
                     const fresh = await fetch(req);
                     const cache = await caches.open(CACHE_NAME);
                     cache.put("./index.html", fresh.clone());
@@ -67,7 +58,6 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // Cache-first for assets
     event.respondWith(
         (async () => {
             const cached = await caches.match(req);
@@ -75,14 +65,12 @@ self.addEventListener("fetch", (event) => {
 
             try {
                 const res = await fetch(req);
-                // Cache successful basic responses
                 if (res && res.ok && res.type === "basic") {
                     const cache = await caches.open(CACHE_NAME);
                     cache.put(req, res.clone());
                 }
                 return res;
-            } catch (e) {
-                // If offline and not cached
+            } catch {
                 return cached || Response.error();
             }
         })()

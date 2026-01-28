@@ -11,7 +11,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
 
-    <!-- iOS basic (works even without full install prompt) -->
+    <!-- iOS basic -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -108,6 +108,17 @@
                 </div>
                 <div class="hint">Smart mode adapts using solve time + mistakes. Daily Challenge works fully offline.
                 </div>
+
+                <!-- ✅ APK download (mobile only, hides when PWA installed or already clicked) -->
+                <div style="margin-top:12px">
+                    <button class="btn" id="btnDownloadApk" type="button" style="display:none">
+                        Download Android App (APK)
+                    </button>
+                    <div class="hint" id="apkHint" style="display:none">
+                        If your phone asks, allow downloads from your browser. After installing, this button will
+                        disappear.
+                    </div>
+                </div>
             </div>
 
             <div class="sheet-group">
@@ -145,14 +156,12 @@
     </div>
 
     <script>
-        // Register SW (offline)
+        // Register SW (offline). Use relative path for GitHub Pages subfolder.
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", async () => {
                 try {
-                    // IMPORTANT: keep relative path so it works on GitHub Pages subfolder
                     await navigator.serviceWorker.register("./sw.js", { scope: "./" });
                 } catch (e) {
-                    // no alerts: silent fail
                     console.log("SW register failed:", e);
                 }
             });

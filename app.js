@@ -4,6 +4,7 @@
    - Adaptive generator (Smart)
    - Daily Challenge (seeded per date, offline)
    - Mobile fit: board-first sizing so Sudoku always fully visible
+   - APK download button (mobile-only, hides when installed / already clicked)
 */
 
 const $ = (s) => document.querySelector(s);
@@ -50,9 +51,43 @@ const winBody = $("#winBody");
 const btnCloseWin = $("#btnCloseWin");
 const btnNextSmart = $("#btnNextSmart");
 
+// ✅ APK download UI
+const btnDownloadApk = $("#btnDownloadApk");
+const apkHint = $("#apkHint");
+
 const LS_KEY = "ultimate_sudoku_state_v2";
 const STATS_KEY = "ultimate_sudoku_stats_v2";
 const DAILY_KEY = "ultimate_sudoku_daily_v1";
+
+/* --------------------- APK download (mobile only, auto-hide) --------------------- */
+function isMobileBrowser() {
+    const w = window.visualViewport?.width ?? window.innerWidth;
+    const ua = navigator.userAgent || "";
+    const touch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+    const phoneUA = /Android|iPhone|iPad|iPod/i.test(ua);
+    return (w <= 980) && touch && phoneUA;
+}
+function isStandalonePWA() {
+    return window.matchMedia?.("(display-mode: standalone)")?.matches || (navigator.standalone === true);
+}
+function apkAlreadyClicked() {
+    return localStorage.getItem("ultimate_sudoku_apk_downloaded") === "1";
+}
+function updateApkButtonVisibility() {
+    if (!btnDownloadApk) return;
+    const shouldShow = isMobileBrowser() && !isStandalonePWA() && !apkAlreadyClicked();
+    btnDownloadApk.style.display = shouldShow ? "inline-flex" : "none";
+    if (apkHint) apkHint.style.display = shouldShow ? "block" : "none";
+}
+
+if (btnDownloadApk) {
+    btnDownloadApk.addEventListener("click", () => {
+        localStorage.setItem("ultimate_sudoku_apk_downloaded", "1");
+        updateApkButtonVisibility();
+        // Start download (file must exist in same folder)
+        window.location.href = "./Ultimate_Sudoku.apk";
+    });
+}
 
 /* --------------------- Perfect fit sizing (board-first on mobile) --------------------- */
 function setPerfectMobileFitCellSize() {
@@ -69,7 +104,6 @@ function setPerfectMobileFitCellSize() {
     const vvW = window.visualViewport?.width ?? window.innerWidth;
     const isMobile = vvW <= 980;
 
-    // Laptop: keep layout same; only prevent too-wide cells
     if (!isMobile) {
         const sidePadding = 28;
         const boardPadding = 20;
@@ -79,10 +113,7 @@ function setPerfectMobileFitCellSize() {
         return;
     }
 
-    // Mobile: compute available height precisely
     const topH = topbar.getBoundingClientRect().height;
-
-    // cushion helps with Android bars / safe areas
     const cushion = 12;
     const availableH = vvH - topH - cushion - 10;
 
@@ -90,19 +121,14 @@ function setPerfectMobileFitCellSize() {
     const gap = parseFloat(mainStyles.gap || "10") || 10;
 
     const controlsH = controlsCard.getBoundingClientRect().height;
-
-    // Remaining height for board card (includes header/footer + grid)
     const boardAllowedH = availableH - gap - controlsH;
 
     const headerH = boardHeader ? boardHeader.getBoundingClientRect().height : 0;
     const footerH = boardFooter ? boardFooter.getBoundingClientRect().height : 0;
 
-    // Board inner padding estimate (grid padding + breathing)
     const boardInnerPad = 18;
-
     const maxByHeight = Math.floor((boardAllowedH - headerH - footerH - boardInnerPad) / 9);
 
-    // Width constraint
     const sidePadding = 20;
     const boardPad = 18;
     const maxByWidth = Math.floor((vvW - sidePadding - boardPad) / 9);
@@ -663,11 +689,7 @@ function computeConflicts(grid) {
 }
 
 function render() {
-    const modeLabel =
-        state.mode === "daily" ? "Daily" :
-            state.mode === "smart" ? "Smart" : "Manual";
-
-    pillMode.textContent = `Mode: ${modeLabel}`;
+    pillMode.textContent = `Mode: ${state.mode === "daily" ? "Daily" : (state.mode === "smart" ? "Smart" : "Manual")}`;
     pillDiff.textContent = `Difficulty: ${state.diff}`;
     pillTimer.textContent = formatTime(state.elapsed);
 
@@ -743,11 +765,6 @@ function render() {
 
 /* --------------------- Actions --------------------- */
 function selectCell(i) { state.selected = i; render(); saveState(); }
-function moveSel(delta) {
-    if (state.selected < 0) return;
-    selectCell(clamp(state.selected + delta, 0, 80));
-}
-
 function pushHistory() {
     state.history.push({
         userGrid: state.userGrid.slice(),
@@ -757,15 +774,6 @@ function pushHistory() {
     if (state.history.length > 140) state.history.shift();
     state.future = [];
 }
-
-function recomputeAutoNotes() {
-    state.notes = Array.from({ length: 81 }, (_, i) => {
-        if (state.userGrid[i] !== 0) return new Set();
-        if (state.givenMask[i]) return new Set();
-        return new Set(computeCandidates(state.userGrid, i));
-    });
-}
-
 function clearNoteInPeers(i, n) {
     const r = rowOf(i), c = colOf(i);
     for (let k = 0; k < 9; k++) {
@@ -779,7 +787,13 @@ function clearNoteInPeers(i, n) {
         }
     }
 }
-
+function recomputeAutoNotes() {
+    state.notes = Array.from({ length: 81 }, (_, i) => {
+        if (state.userGrid[i] !== 0) return new Set();
+        if (state.givenMask[i]) return new Set();
+        return new Set(computeCandidates(state.userGrid, i));
+    });
+}
 function setValue(n) {
     if (!state.running) return;
     const i = state.selected;
@@ -802,7 +816,6 @@ function setValue(n) {
     if (isSolvedCorrect()) onWin();
     render(); saveState();
 }
-
 function eraseValue() {
     if (!state.running) return;
     const i = state.selected;
@@ -813,9 +826,7 @@ function eraseValue() {
     if (state.autoNotes) recomputeAutoNotes();
     render(); saveState();
 }
-
 function toggleNotes() { state.notesMode = !state.notesMode; render(); saveState(); }
-
 function undo() {
     const prev = state.history.pop();
     if (!prev) return;
@@ -829,7 +840,6 @@ function undo() {
     state.mistakes = prev.mistakes ?? state.mistakes;
     render(); saveState();
 }
-
 function redo() {
     const next = state.future.pop();
     if (!next) return;
@@ -843,7 +853,6 @@ function redo() {
     state.mistakes = next.mistakes ?? state.mistakes;
     render(); saveState();
 }
-
 function restartPuzzle() {
     pushHistory();
     state.userGrid = state.puzzle.slice();
@@ -856,13 +865,11 @@ function restartPuzzle() {
     if (state.autoNotes) recomputeAutoNotes();
     render(); saveState();
 }
-
 function clearNotes() {
     pushHistory();
     state.notes = Array.from({ length: 81 }, () => new Set());
     render(); saveState();
 }
-
 function clearAllUserInput() {
     pushHistory();
     for (let i = 0; i < 81; i++) {
@@ -880,7 +887,6 @@ function isSolvedCorrect() {
     }
     return true;
 }
-
 function onWin() {
     state.running = false;
     const timeSec = Math.floor(state.elapsed);
@@ -966,11 +972,9 @@ function startNewGame(modeOrDiff) {
         state.running = true;
         state.startTs = nowMs();
 
-        // sizing pass
         setPerfectMobileFitCellSize();
         render(); saveState();
 
-        // second pass after DOM paints
         setPerfectMobileFitCellSize();
         render(); saveState();
     }, 20);
@@ -1064,7 +1068,11 @@ function closeWin() {
 })();
 
 /* --------------------- Events --------------------- */
-btnMenu.addEventListener("click", () => toggleSheet());
+btnMenu.addEventListener("click", () => {
+    updateApkButtonVisibility();
+    toggleSheet();
+});
+
 btnNew.addEventListener("click", () => startNewGame("smart"));
 btnDaily.addEventListener("click", () => startDailyChallenge(todayKey()));
 menuDaily.addEventListener("click", () => { closeSheet(); startDailyChallenge(todayKey()); });
@@ -1112,17 +1120,16 @@ btnCloseWin.addEventListener("click", closeWin);
 btnNextSmart.addEventListener("click", () => { closeWin(); startNewGame("smart"); });
 modalBackdrop.addEventListener("click", closeWin);
 
-/* Resize recalculation */
-window.addEventListener("resize", () => { setPerfectMobileFitCellSize(); render(); });
-window.visualViewport?.addEventListener("resize", () => { setPerfectMobileFitCellSize(); render(); });
+window.addEventListener("resize", () => { setPerfectMobileFitCellSize(); updateApkButtonVisibility(); render(); });
+window.visualViewport?.addEventListener("resize", () => { setPerfectMobileFitCellSize(); updateApkButtonVisibility(); render(); });
 
 /* --------------------- Boot --------------------- */
 function ensureState() {
     buildBoard();
     buildKeypad();
 
-    // size pass
     setPerfectMobileFitCellSize();
+    updateApkButtonVisibility();
 
     const ok = loadState();
     if (!ok || !state.puzzle || state.puzzle.length !== 81) {
@@ -1135,8 +1142,8 @@ function ensureState() {
         if (state.notes.length !== 81) state.notes = Array.from({ length: 81 }, () => new Set());
         render();
 
-        // second pass after DOM
         setPerfectMobileFitCellSize();
+        updateApkButtonVisibility();
         render();
     }
 

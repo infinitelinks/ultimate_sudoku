@@ -60,7 +60,6 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* ---------- Header ---------- */
 .topbar {
     padding: 12px 12px 8px;
     display: flex;
@@ -111,7 +110,6 @@ body {
     gap: 8px;
 }
 
-/* ---------- Buttons ---------- */
 .btn {
     border: 1px solid var(--line);
     background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .03));
@@ -139,7 +137,6 @@ body {
     transform: none;
 }
 
-/* ---------- Layout ---------- */
 .main {
     flex: 1 1 auto;
     min-height: 0;
@@ -174,7 +171,6 @@ body {
     overflow: hidden;
 }
 
-/* ---------- Board Card ---------- */
 .board-card {
     width: 100%;
     background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02));
@@ -203,7 +199,6 @@ body {
     font-weight: 900;
 }
 
-/* ---------- Sudoku Grid ---------- */
 .board {
     margin: 0 auto;
     padding: 10px;
@@ -292,7 +287,6 @@ body {
     color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
-/* ---------- Footer ---------- */
 .board-footer {
     padding: 8px 10px 10px;
     display: flex;
@@ -352,7 +346,6 @@ body {
     transition: width .22s ease;
 }
 
-/* ---------- Controls ---------- */
 .control-card {
     width: 100%;
     background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02));
@@ -412,7 +405,6 @@ body {
     color: var(--muted);
 }
 
-/* ---------- Sheet / Modal ---------- */
 .sheet-backdrop,
 .modal-backdrop {
     position: fixed;
@@ -544,28 +536,24 @@ body {
     margin-top: 12px;
 }
 
-/* ---------- MOBILE: board-first fit helpers ---------- */
 @media (max-width: 980px) {
     .main {
         gap: 10px;
         padding: 0 10px 10px;
     }
 
-    /* Slightly smaller header buttons */
     .top-actions .btn {
         padding: 8px 10px;
         border-radius: 12px;
         font-size: 13px;
     }
 
-    /* Controls buttons smaller */
     .control-card .row .btn {
         padding: 8px 10px;
         border-radius: 12px;
         font-size: 13px;
     }
 
-    /* Keypad slightly tighter */
     .keypad {
         gap: 6px;
     }
@@ -584,8 +572,9 @@ body {
         font-size: 11px;
     }
 
-    /* IMPORTANT: tighter board padding so full grid fits */
     .board {
         padding: 6px;
     }
+
+    /* important for full-fit */
 }
