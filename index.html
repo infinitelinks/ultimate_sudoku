@@ -16,15 +16,15 @@
         <header class="topbar">
             <div class="brand">
                 <div class="logo" aria-hidden="true"></div>
-                <div>
+                <div class="brand-text">
                     <div class="title">Ultimate Sudoku</div>
-                    <div class="subtitle" id="subtitle">Offline • Adaptive difficulty</div>
+                    <div class="subtitle" id="subtitle">Offline • System theme • Daily Challenge</div>
                 </div>
             </div>
 
             <div class="top-actions">
+                <button class="btn ghost" id="btnDaily" title="Daily Challenge">Daily</button>
                 <button class="btn ghost" id="btnNew" title="New game">New</button>
-                <button class="btn ghost" id="btnStats" title="Stats">Stats</button>
                 <button class="btn ghost" id="btnMenu" title="Menu">Menu</button>
             </div>
         </header>
@@ -90,8 +90,9 @@
                 <div class="sheet-title">Menu</div>
 
                 <div class="sheet-group">
-                    <div class="sheet-label">New game</div>
+                    <div class="sheet-label">Play</div>
                     <div class="grid-2">
+                        <button class="btn" id="menuDaily">Daily Challenge</button>
                         <button class="btn" data-new="smart">Smart (Adaptive)</button>
                         <button class="btn" data-new="moderate">Moderate</button>
                         <button class="btn" data-new="hard">Hard</button>
@@ -108,10 +109,8 @@
                 </div>
 
                 <div class="sheet-group">
-                    <div class="sheet-label">Install</div>
-                    <button class="btn" id="btnInstall" hidden>Install App</button>
-                    <div class="hint" id="installHint">If Install doesn’t appear, your browser may not support
-                        prompt-based install.</div>
+                    <div class="sheet-label">Daily</div>
+                    <div class="stats" id="dailyBox"></div>
                 </div>
 
                 <div class="sheet-group">
@@ -122,7 +121,8 @@
 
                 <div class="sheet-group">
                     <div class="hint">
-                        Tip: “Smart” mode adapts based on your last games: solve time, mistakes, and completion rate.
+                        Smart mode adapts to you using recent solve time + mistakes. Daily Challenge is deterministic
+                        per date and works fully offline.
                     </div>
                 </div>
             </div>
@@ -131,7 +131,7 @@
         <!-- Win modal -->
         <div class="modal-backdrop" id="modalBackdrop" hidden></div>
         <div class="modal" id="modalWin" hidden role="dialog" aria-modal="true" aria-label="Puzzle complete">
-            <div class="modal-title">Puzzle complete</div>
+            <div class="modal-title" id="winTitle">Puzzle complete</div>
             <div class="modal-body" id="winBody"></div>
             <div class="modal-actions">
                 <button class="btn ghost" id="btnCloseWin">Close</button>
@@ -142,7 +142,6 @@
 
     <script src="app.js"></script>
     <script>
-        // Register service worker
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
         }
