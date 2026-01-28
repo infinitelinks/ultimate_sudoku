@@ -3,7 +3,7 @@
    - System theme (CSS)
    - Adaptive generator (Smart)
    - Daily Challenge (seeded per date, offline)
-   - Perfect-fit mobile sizing (visualViewport)
+   - Mobile fit: guarantees board + keypad fit in visible viewport (Android)
 */
 
 const $ = (s) => document.querySelector(s);
@@ -54,46 +54,67 @@ const LS_KEY = "ultimate_sudoku_state_v2";
 const STATS_KEY = "ultimate_sudoku_stats_v2";
 const DAILY_KEY = "ultimate_sudoku_daily_v1";
 
-/* --------------------- Perfect mobile fit --------------------- */
+/* --------------------- Perfect fit sizing --------------------- */
 function setPerfectMobileFitCellSize() {
     const topbar = document.querySelector(".topbar");
+    const main = document.querySelector(".main");
     const boardCard = document.querySelector(".board-card");
-    if (!topbar || !boardCard) return;
+    const controlsCard = document.querySelector(".control-card");
+    if (!topbar || !main || !boardCard || !controlsCard) return;
 
     const vvH = window.visualViewport?.height ?? window.innerHeight;
     const vvW = window.visualViewport?.width ?? window.innerWidth;
-
     const isMobile = vvW <= 980;
+
+    // Laptop: keep layout same; only prevent too-wide cells
+    if (!isMobile) {
+        const sidePadding = 28;
+        const boardPadding = 20;
+        const maxByWidth = Math.floor((vvW - sidePadding - boardPadding) / 9);
+        const cell = Math.max(34, Math.min(maxByWidth, 56));
+        document.documentElement.style.setProperty("--cell", `${cell}px`);
+        return;
+    }
 
     const topH = topbar.getBoundingClientRect().height;
 
-    // main padding (css uses 12px left/right + 12px bottom, plus small safety)
-    const safety = 14;
-    const availableMainH = vvH - topH - 12 - 12 - safety; // topbar + vertical paddings + cushion
+    // available height below header (with cushion for Android bars)
+    const cushion = 14;
+    const availableH = vvH - topH - cushion - 10;
 
-    const boardHeader = boardCard.querySelector(".board-header");
-    const boardFooter = boardCard.querySelector(".board-footer");
-    const headerH = boardHeader?.getBoundingClientRect().height ?? 0;
-    const footerH = boardFooter?.getBoundingClientRect().height ?? 0;
+    const mainStyles = getComputedStyle(main);
+    const gap = parseFloat(mainStyles.gap || "10") || 10;
 
-    // On mobile, controls are below the board; reserve enough room for controls.
-    // This keeps keypad always visible.
-    const minControls = isMobile ? 260 : 0;
-    const boardTargetH = isMobile ? Math.max(availableMainH - minControls, 260) : availableMainH;
-
-    // Width constraint: board must fit horizontally inside main padding
-    const sidePadding = isMobile ? 24 : 28; // approx container padding
-    const boardPadding = 20; // board internal padding
+    // width constraint
+    const sidePadding = 20;
+    const boardPadding = 18;
     const maxByWidth = Math.floor((vvW - sidePadding - boardPadding) / 9);
 
-    // Height constraint: fit inside boardTargetH minus header/footer and padding
-    const gridPadding = 24; // board internal paddings + breathing
-    const maxByHeight = Math.floor((boardTargetH - headerH - footerH - gridPadding) / 9);
+    // binary search for max cell that fits total height
+    let lo = 26;
+    let hi = Math.min(56, maxByWidth);
+    let best = lo;
 
-    let cell = Math.min(maxByWidth, maxByHeight);
-    cell = Math.max(28, Math.min(cell, 56));
+    const fits = (cell) => {
+        document.documentElement.style.setProperty("--cell", `${cell}px`);
+        // force reflow
+        void boardCard.offsetHeight;
+        const boardH = boardCard.getBoundingClientRect().height;
+        const controlsH = controlsCard.getBoundingClientRect().height;
+        return (boardH + gap + controlsH) <= availableH;
+    };
 
-    document.documentElement.style.setProperty("--cell", `${cell}px`);
+    for (let iter = 0; iter < 12; iter++) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (fits(mid)) {
+            best = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+
+    document.documentElement.style.setProperty("--cell", `${best}px`);
 }
 
 /* --------------------- Seeded RNG (daily) --------------------- */
@@ -509,7 +530,7 @@ function saveDailyState(d) { localStorage.setItem(DAILY_KEY, JSON.stringify(d));
 
 /* --------------------- Game state --------------------- */
 let state = {
-    mode: "smart",     // smart|manual|daily
+    mode: "smart",
     diff: "moderate",
     dailyDate: null,
     puzzle: emptyGrid(),
@@ -521,12 +542,10 @@ let state = {
     selected: -1,
     conflictsOn: true,
     autoNotes: false,
-
     startTs: 0,
     elapsed: 0,
     running: true,
     mistakes: 0,
-
     history: [],
     future: []
 };
@@ -548,7 +567,7 @@ function loadState() {
     }
 }
 
-/* --------------------- UI build --------------------- */
+/* --------------------- UI build/render --------------------- */
 function buildBoard() {
     boardEl.innerHTML = "";
     for (let i = 0; i < 81; i++) {
@@ -656,8 +675,9 @@ function render() {
     pillDiff.textContent = `Difficulty: ${state.diff}`;
     pillTimer.textContent = formatTime(state.elapsed);
 
-    if (state.mode === "daily") subtitle.textContent = `Offline • Daily Challenge • ${state.dailyDate}`;
-    else subtitle.textContent = `Offline • System theme • Adaptive generator`;
+    subtitle.textContent = (state.mode === "daily")
+        ? `Offline • Daily Challenge • ${state.dailyDate}`
+        : `Offline • System theme • Adaptive generator`;
 
     const filled = countNonZero(state.userGrid);
     progressFill.style.width = Math.round((filled / 81) * 100) + "%";
@@ -778,7 +798,6 @@ function setValue(n) {
     } else {
         state.userGrid[i] = n;
         if (state.solution[i] !== 0 && n !== state.solution[i]) state.mistakes += 1;
-
         if (state.autoNotes) {
             clearNoteInPeers(i, n);
             state.notes[i].clear();
@@ -913,10 +932,10 @@ function startTimerLoop() {
 /* --------------------- New game / Daily --------------------- */
 function startNewGame(modeOrDiff) {
     closeWin();
+    state.dailyDate = null;
 
     let mode = "manual";
     let diff = "moderate";
-    state.dailyDate = null;
 
     if (modeOrDiff === "smart") {
         mode = "smart";
@@ -933,7 +952,7 @@ function startNewGame(modeOrDiff) {
     render();
 
     setTimeout(() => {
-        const { puzzle, solution, meta } = generatePuzzle(diff);
+        const { puzzle, solution } = generatePuzzle(diff);
 
         state.mode = mode;
         state.diff = diff;
@@ -952,12 +971,13 @@ function startNewGame(modeOrDiff) {
         state.running = true;
         state.startTs = nowMs();
 
-        subtitle.textContent = `Offline • System theme • Rated: ${meta.rating.band}`;
-        if (state.autoNotes) recomputeAutoNotes();
-
         setPerfectMobileFitCellSize();
         render();
         saveState();
+
+        // second pass (after DOM updated) for exact fit
+        setPerfectMobileFitCellSize();
+        render();
     }, 20);
 }
 
@@ -969,12 +989,11 @@ function startDailyChallenge(dateStr = todayKey()) {
     const rnd = mulberry32(seedFn());
 
     const diff = pickSmartDifficulty();
-
     statusText.textContent = "Loading daily challenge…";
     render();
 
     setTimeout(() => {
-        const { puzzle, solution, meta } = generatePuzzle(diff, rnd);
+        const { puzzle, solution } = generatePuzzle(diff, rnd);
 
         state.mode = "daily";
         state.diff = diff;
@@ -995,12 +1014,12 @@ function startDailyChallenge(dateStr = todayKey()) {
         state.running = true;
         state.startTs = nowMs();
 
-        subtitle.textContent = `Offline • Daily Challenge • Rated: ${meta.rating.band} • ${dateStr}`;
-        if (state.autoNotes) recomputeAutoNotes();
-
         setPerfectMobileFitCellSize();
         render();
         saveState();
+
+        setPerfectMobileFitCellSize();
+        render();
     }, 20);
 }
 
@@ -1108,6 +1127,7 @@ window.visualViewport?.addEventListener("resize", () => { setPerfectMobileFitCel
 function ensureState() {
     buildBoard();
     buildKeypad();
+
     setPerfectMobileFitCellSize();
 
     const ok = loadState();
@@ -1120,7 +1140,11 @@ function ensureState() {
         state.notes = (state.notes || []).map(s => (s instanceof Set ? s : new Set(s)));
         if (state.notes.length !== 81) state.notes = Array.from({ length: 81 }, () => new Set());
         render();
+        // second pass sizing for exact fit after render
+        setPerfectMobileFitCellSize();
+        render();
     }
+
     startTimerLoop();
 }
 

@@ -60,6 +60,7 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* ---------- Header ---------- */
 .topbar {
     padding: 12px 12px 8px;
     display: flex;
@@ -110,6 +111,7 @@ body {
     gap: 8px;
 }
 
+/* ---------- Buttons ---------- */
 .btn {
     border: 1px solid var(--line);
     background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .03));
@@ -137,6 +139,7 @@ body {
     transform: none;
 }
 
+/* ---------- Layout ---------- */
 .main {
     flex: 1 1 auto;
     min-height: 0;
@@ -171,6 +174,7 @@ body {
     overflow: hidden;
 }
 
+/* ---------- Board Card ---------- */
 .board-card {
     width: 100%;
     background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02));
@@ -199,6 +203,7 @@ body {
     font-weight: 900;
 }
 
+/* ---------- Sudoku Grid ---------- */
 .board {
     margin: 0 auto;
     padding: 10px;
@@ -287,6 +292,7 @@ body {
     color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
+/* ---------- Footer ---------- */
 .board-footer {
     padding: 8px 10px 10px;
     display: flex;
@@ -346,6 +352,7 @@ body {
     transition: width .22s ease;
 }
 
+/* ---------- Controls ---------- */
 .control-card {
     width: 100%;
     background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02));
@@ -405,7 +412,7 @@ body {
     color: var(--muted);
 }
 
-/* Sheet / Modal */
+/* ---------- Sheet / Modal ---------- */
 .sheet-backdrop,
 .modal-backdrop {
     position: fixed;
@@ -535,4 +542,46 @@ body {
     gap: 10px;
     justify-content: flex-end;
     margin-top: 12px;
+}
+
+/* ---------- MOBILE-ONLY compact mode (keypad + ui shrink) ---------- */
+@media (max-width: 980px) {
+    .main {
+        gap: 10px;
+        padding: 0 10px 10px;
+    }
+
+    .top-actions .btn {
+        padding: 8px 10px;
+        border-radius: 12px;
+        font-size: 13px;
+    }
+
+    .control-card .row .btn {
+        padding: 8px 10px;
+        border-radius: 12px;
+        font-size: 13px;
+    }
+
+    .keypad {
+        gap: 6px;
+    }
+
+    .key {
+        padding: 9px 8px;
+        border-radius: 14px;
+        font-size: 16px;
+    }
+
+    .key.small {
+        font-size: 12px;
+    }
+
+    .status {
+        font-size: 11px;
+    }
+
+    .board {
+        padding: 8px;
+    }
 }
