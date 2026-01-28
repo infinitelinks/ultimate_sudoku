@@ -1,9 +1,9 @@
 /* Ultimate Sudoku PWA
    - Offline
-   - System theme (CSS handles it)
-   - Adaptive generator (Smart mode)
-   - Daily Challenge: deterministic puzzle per date (seeded RNG)
-   - No hint/solver assistant shown
+   - System theme (CSS)
+   - Adaptive generator (Smart)
+   - Daily Challenge (seeded per date, offline)
+   - Perfect-fit mobile sizing (visualViewport)
 */
 
 const $ = (s) => document.querySelector(s);
@@ -54,7 +54,49 @@ const LS_KEY = "ultimate_sudoku_state_v2";
 const STATS_KEY = "ultimate_sudoku_stats_v2";
 const DAILY_KEY = "ultimate_sudoku_daily_v1";
 
-/* --------------------- RNG (seeded) --------------------- */
+/* --------------------- Perfect mobile fit --------------------- */
+function setPerfectMobileFitCellSize() {
+    const topbar = document.querySelector(".topbar");
+    const boardCard = document.querySelector(".board-card");
+    if (!topbar || !boardCard) return;
+
+    const vvH = window.visualViewport?.height ?? window.innerHeight;
+    const vvW = window.visualViewport?.width ?? window.innerWidth;
+
+    const isMobile = vvW <= 980;
+
+    const topH = topbar.getBoundingClientRect().height;
+
+    // main padding (css uses 12px left/right + 12px bottom, plus small safety)
+    const safety = 14;
+    const availableMainH = vvH - topH - 12 - 12 - safety; // topbar + vertical paddings + cushion
+
+    const boardHeader = boardCard.querySelector(".board-header");
+    const boardFooter = boardCard.querySelector(".board-footer");
+    const headerH = boardHeader?.getBoundingClientRect().height ?? 0;
+    const footerH = boardFooter?.getBoundingClientRect().height ?? 0;
+
+    // On mobile, controls are below the board; reserve enough room for controls.
+    // This keeps keypad always visible.
+    const minControls = isMobile ? 260 : 0;
+    const boardTargetH = isMobile ? Math.max(availableMainH - minControls, 260) : availableMainH;
+
+    // Width constraint: board must fit horizontally inside main padding
+    const sidePadding = isMobile ? 24 : 28; // approx container padding
+    const boardPadding = 20; // board internal padding
+    const maxByWidth = Math.floor((vvW - sidePadding - boardPadding) / 9);
+
+    // Height constraint: fit inside boardTargetH minus header/footer and padding
+    const gridPadding = 24; // board internal paddings + breathing
+    const maxByHeight = Math.floor((boardTargetH - headerH - footerH - gridPadding) / 9);
+
+    let cell = Math.min(maxByWidth, maxByHeight);
+    cell = Math.max(28, Math.min(cell, 56));
+
+    document.documentElement.style.setProperty("--cell", `${cell}px`);
+}
+
+/* --------------------- Seeded RNG (daily) --------------------- */
 function xmur3(str) {
     let h = 1779033703 ^ str.length;
     for (let i = 0; i < str.length; i++) {
@@ -68,7 +110,6 @@ function xmur3(str) {
         return h >>> 0;
     };
 }
-
 function mulberry32(a) {
     return function () {
         let t = (a += 0x6D2B79F5);
@@ -78,7 +119,7 @@ function mulberry32(a) {
     };
 }
 
-/* --------------------- Utilities --------------------- */
+/* --------------------- Utils --------------------- */
 function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 function nowMs() { return performance.now ? performance.now() : Date.now(); }
 function formatTime(sec) {
@@ -94,7 +135,6 @@ function rowOf(i) { return Math.floor(i / 9); }
 function colOf(i) { return i % 9; }
 function boxOf(i) { return Math.floor(rowOf(i) / 3) * 3 + Math.floor(colOf(i) / 3); }
 function countNonZero(g) { let n = 0; for (const v of g) if (v) n++; return n; }
-function completionCount(g) { return countNonZero(g); }
 function todayKey() {
     const d = new Date();
     const y = d.getFullYear();
@@ -103,7 +143,7 @@ function todayKey() {
     return `${y}-${m}-${da}`;
 }
 
-/* --------------------- Stats + Adaptive Profile --------------------- */
+/* --------------------- Stats --------------------- */
 function defaultStats() {
     return {
         games: 0,
@@ -114,7 +154,6 @@ function defaultStats() {
         daily: { streak: 0, lastWinDate: null, bestTimeSec: null }
     };
 }
-
 function loadStats() {
     try {
         const s = JSON.parse(localStorage.getItem(STATS_KEY));
@@ -126,7 +165,6 @@ function loadStats() {
         return s;
     } catch { return defaultStats(); }
 }
-
 function saveStats(s) { localStorage.setItem(STATS_KEY, JSON.stringify(s)); }
 
 function diffTargets(diff) {
@@ -143,7 +181,6 @@ function updateProfileAfterGame({ won, timeSec, mistakes, diff, isDaily }) {
     stats.last10.unshift({ ts: Date.now(), mode: state.mode, diff, timeSec, mistakes, daily: !!isDaily });
     stats.last10 = stats.last10.slice(0, 10);
 
-    // Skill update
     const target = diffTargets(diff);
     const timeScore = clamp(1 - (timeSec / target.targetSec), 0, 1);
     const mistakeScore = clamp(1 - (mistakes / target.maxMistakes), 0, 1);
@@ -151,28 +188,24 @@ function updateProfileAfterGame({ won, timeSec, mistakes, diff, isDaily }) {
     const sample = (0.45 * timeScore) + (0.45 * mistakeScore) + (0.10 * winScore);
     stats.profile.skill = clamp(stats.profile.skill * 0.78 + sample * 0.22, 0, 1);
 
-    // Best time per diff
     if (won && !isDaily) {
         const best = stats.best[diff];
         if (best == null || timeSec < best) stats.best[diff] = timeSec;
     }
 
-    // Daily tracking
     if (won && isDaily) {
-        const tk = state.dailyDate;
-        // streak logic (local, offline)
+        const day = state.dailyDate;
         const last = stats.daily.lastWinDate;
-        const today = tk;
 
         if (!last) {
             stats.daily.streak = 1;
         } else {
             const lastDate = new Date(last + "T00:00:00");
-            const todayDate = new Date(today + "T00:00:00");
+            const todayDate = new Date(day + "T00:00:00");
             const diffDays = Math.round((todayDate - lastDate) / (24 * 3600 * 1000));
             stats.daily.streak = (diffDays === 1) ? (stats.daily.streak + 1) : (diffDays === 0 ? stats.daily.streak : 1);
         }
-        stats.daily.lastWinDate = today;
+        stats.daily.lastWinDate = day;
 
         if (stats.daily.bestTimeSec == null || timeSec < stats.daily.bestTimeSec) {
             stats.daily.bestTimeSec = timeSec;
@@ -204,7 +237,7 @@ function statsText() {
         `Games: ${s.games}`,
         `Wins: ${s.wins} (${winRate}%)`,
         `Skill: ${skill}/100`,
-        `Best times: Moderate ${bestM} • Hard ${bestH} • Pro ${bestP}`,
+        `Best: Moderate ${bestM} • Hard ${bestH} • Pro ${bestP}`,
         last ? `Last: ${last.daily ? "Daily" : "Normal"} • ${last.diff} • ${formatTime(last.timeSec)} • mistakes ${last.mistakes}` : "Last: —",
         `Smart next: ${pickSmartDifficulty()}`
     ].join("\n");
@@ -230,7 +263,7 @@ function dailyText() {
     ].join("\n");
 }
 
-/* --------------------- Sudoku logic --------------------- */
+/* --------------------- Sudoku core --------------------- */
 function computeCandidates(grid, i) {
     if (grid[i] !== 0) return [];
     const used = new Set();
@@ -405,9 +438,11 @@ function betterMatch(a, b, targetBand, scoreRange) {
     };
     const da = dist(a), db = dist(b);
     if (da !== db) return da < db;
+
     const aOk = bandOk(a.band, targetBand, a.score, scoreRange);
     const bOk = bandOk(b.band, targetBand, b.score, scoreRange);
     if (aOk !== bOk) return aOk;
+
     return a.guesses < b.guesses;
 }
 
@@ -458,7 +493,7 @@ function generatePuzzle(targetBand, rnd = Math.random) {
     return { puzzle: best.puzzle, solution, meta: { targetBand, rating: best.rating } };
 }
 
-/* --------------------- Daily Challenge state --------------------- */
+/* --------------------- Daily storage --------------------- */
 function loadDailyState() {
     try {
         const raw = localStorage.getItem(DAILY_KEY);
@@ -470,16 +505,13 @@ function loadDailyState() {
         return { history: {} };
     }
 }
+function saveDailyState(d) { localStorage.setItem(DAILY_KEY, JSON.stringify(d)); }
 
-function saveDailyState(d) {
-    localStorage.setItem(DAILY_KEY, JSON.stringify(d));
-}
-
-/* --------------------- Game State --------------------- */
+/* --------------------- Game state --------------------- */
 let state = {
     mode: "smart",     // smart|manual|daily
     diff: "moderate",
-    dailyDate: null,   // YYYY-MM-DD when mode=daily
+    dailyDate: null,
     puzzle: emptyGrid(),
     solution: emptyGrid(),
     givenMask: Array(81).fill(false),
@@ -500,13 +532,9 @@ let state = {
 };
 
 function saveState() {
-    const safe = {
-        ...state,
-        notes: state.notes.map(set => Array.from(set)),
-    };
+    const safe = { ...state, notes: state.notes.map(set => Array.from(set)) };
     localStorage.setItem(LS_KEY, JSON.stringify(safe));
 }
-
 function loadState() {
     try {
         const raw = localStorage.getItem(LS_KEY);
@@ -520,7 +548,7 @@ function loadState() {
     }
 }
 
-/* --------------------- UI Build / Render --------------------- */
+/* --------------------- UI build --------------------- */
 function buildBoard() {
     boardEl.innerHTML = "";
     for (let i = 0; i < 81; i++) {
@@ -628,12 +656,10 @@ function render() {
     pillDiff.textContent = `Difficulty: ${state.diff}`;
     pillTimer.textContent = formatTime(state.elapsed);
 
-    // subtitle
     if (state.mode === "daily") subtitle.textContent = `Offline • Daily Challenge • ${state.dailyDate}`;
     else subtitle.textContent = `Offline • System theme • Adaptive generator`;
 
-    // progress
-    const filled = completionCount(state.userGrid);
+    const filled = countNonZero(state.userGrid);
     progressFill.style.width = Math.round((filled / 81) * 100) + "%";
 
     const sel = state.selected;
@@ -696,23 +722,15 @@ function render() {
     else if (state.selected < 0) statusText.textContent = "Tap a cell to begin.";
     else statusText.textContent = state.notesMode ? "Notes mode: tap numbers to add/remove." : "Enter a number.";
 
-    // menu boxes
     statsBox.textContent = statsText();
     dailyBox.textContent = dailyText();
 }
 
 /* --------------------- Actions --------------------- */
-function selectCell(i) {
-    state.selected = i;
-    render();
-    saveState();
-}
-
+function selectCell(i) { state.selected = i; render(); saveState(); }
 function moveSel(delta) {
     if (state.selected < 0) return;
-    let i = state.selected + delta;
-    i = clamp(i, 0, 80);
-    selectCell(i);
+    selectCell(clamp(state.selected + delta, 0, 80));
 }
 
 function pushHistory() {
@@ -750,8 +768,7 @@ function clearNoteInPeers(i, n) {
 function setValue(n) {
     if (!state.running) return;
     const i = state.selected;
-    if (i < 0) return;
-    if (state.givenMask[i]) return;
+    if (i < 0 || state.givenMask[i]) return;
 
     pushHistory();
 
@@ -760,8 +777,6 @@ function setValue(n) {
         if (s.has(n)) s.delete(n); else s.add(n);
     } else {
         state.userGrid[i] = n;
-
-        // Mistake tracking (for adaptation + stats)
         if (state.solution[i] !== 0 && n !== state.solution[i]) state.mistakes += 1;
 
         if (state.autoNotes) {
@@ -770,32 +785,22 @@ function setValue(n) {
         }
     }
 
-    if (isSolvedCorrect()) {
-        onWin();
-    }
-
-    render();
-    saveState();
+    if (isSolvedCorrect()) onWin();
+    render(); saveState();
 }
 
 function eraseValue() {
     if (!state.running) return;
     const i = state.selected;
-    if (i < 0) return;
-    if (state.givenMask[i]) return;
+    if (i < 0 || state.givenMask[i]) return;
 
     pushHistory();
     state.userGrid[i] = 0;
     if (state.autoNotes) recomputeAutoNotes();
-    render();
-    saveState();
+    render(); saveState();
 }
 
-function toggleNotes() {
-    state.notesMode = !state.notesMode;
-    render();
-    saveState();
-}
+function toggleNotes() { state.notesMode = !state.notesMode; render(); saveState(); }
 
 function undo() {
     const prev = state.history.pop();
@@ -808,8 +813,7 @@ function undo() {
     state.userGrid = prev.userGrid.slice();
     state.notes = prev.notes.map(s => new Set(s));
     state.mistakes = prev.mistakes ?? state.mistakes;
-    render();
-    saveState();
+    render(); saveState();
 }
 
 function redo() {
@@ -823,8 +827,7 @@ function redo() {
     state.userGrid = next.userGrid.slice();
     state.notes = next.notes.map(s => new Set(s));
     state.mistakes = next.mistakes ?? state.mistakes;
-    render();
-    saveState();
+    render(); saveState();
 }
 
 function restartPuzzle() {
@@ -837,15 +840,13 @@ function restartPuzzle() {
     state.running = true;
     closeWin();
     if (state.autoNotes) recomputeAutoNotes();
-    render();
-    saveState();
+    render(); saveState();
 }
 
 function clearNotes() {
     pushHistory();
     state.notes = Array.from({ length: 81 }, () => new Set());
-    render();
-    saveState();
+    render(); saveState();
 }
 
 function clearAllUserInput() {
@@ -855,11 +856,10 @@ function clearAllUserInput() {
     }
     state.notes = Array.from({ length: 81 }, () => new Set());
     if (state.autoNotes) recomputeAutoNotes();
-    render();
-    saveState();
+    render(); saveState();
 }
 
-/* --------------------- Win / Timer --------------------- */
+/* --------------------- Win/Timer --------------------- */
 function isSolvedCorrect() {
     for (let i = 0; i < 81; i++) {
         if (state.userGrid[i] !== state.solution[i]) return false;
@@ -871,16 +871,14 @@ function onWin() {
     state.running = false;
     const timeSec = Math.floor(state.elapsed);
     const mistakes = state.mistakes;
-
     const isDaily = state.mode === "daily";
+
     updateProfileAfterGame({ won: true, timeSec, mistakes, diff: state.diff, isDaily });
 
     if (isDaily) {
         const d = loadDailyState();
-        const day = state.dailyDate;
-        d.history[day] = { won: true, timeSec, mistakes };
+        d.history[state.dailyDate] = { won: true, timeSec, mistakes };
         saveDailyState(d);
-
         winTitle.textContent = "Daily complete";
     } else {
         winTitle.textContent = "Puzzle complete";
@@ -898,7 +896,6 @@ let timerHandle = null;
 function startTimerLoop() {
     if (timerHandle) cancelAnimationFrame(timerHandle);
     state.startTs = nowMs();
-
     function tick() {
         if (state.running) {
             const t = nowMs();
@@ -913,7 +910,7 @@ function startTimerLoop() {
     timerHandle = requestAnimationFrame(tick);
 }
 
-/* --------------------- New Game / Daily --------------------- */
+/* --------------------- New game / Daily --------------------- */
 function startNewGame(modeOrDiff) {
     closeWin();
 
@@ -955,10 +952,10 @@ function startNewGame(modeOrDiff) {
         state.running = true;
         state.startTs = nowMs();
 
-        // show rating
         subtitle.textContent = `Offline • System theme • Rated: ${meta.rating.band}`;
         if (state.autoNotes) recomputeAutoNotes();
 
+        setPerfectMobileFitCellSize();
         render();
         saveState();
     }, 20);
@@ -967,15 +964,11 @@ function startNewGame(modeOrDiff) {
 function startDailyChallenge(dateStr = todayKey()) {
     closeWin();
 
-    // If completed today, still allow replay, but stats should show it’s completed.
     const seedStr = `daily:${dateStr}:ultimate-sudoku`;
     const seedFn = xmur3(seedStr);
     const rnd = mulberry32(seedFn());
 
-    // Daily difficulty can also adapt a bit, but keep it in moderate..pro.
-    // We use your skill to choose daily band so it “fits” you.
-    const smart = pickSmartDifficulty();
-    const diff = smart; // daily difficulty = your current smart band
+    const diff = pickSmartDifficulty();
 
     statusText.textContent = "Loading daily challenge…";
     render();
@@ -1005,6 +998,7 @@ function startDailyChallenge(dateStr = todayKey()) {
         subtitle.textContent = `Offline • Daily Challenge • Rated: ${meta.rating.band} • ${dateStr}`;
         if (state.autoNotes) recomputeAutoNotes();
 
+        setPerfectMobileFitCellSize();
         render();
         saveState();
     }, 20);
@@ -1034,23 +1028,20 @@ function closeWin() {
     modalWin.hidden = true;
 }
 
-/* Swipe down to close sheet */
+/* Swipe down to close */
 (function sheetSwipe() {
     let startY = 0;
     let dragging = false;
-
     sheetHandle.addEventListener("pointerdown", (e) => {
         dragging = true;
         startY = e.clientY;
         sheetHandle.setPointerCapture(e.pointerId);
     });
-
     sheetHandle.addEventListener("pointermove", (e) => {
         if (!dragging) return;
         const dy = e.clientY - startY;
         if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
     });
-
     sheetHandle.addEventListener("pointerup", (e) => {
         dragging = false;
         sheet.style.transform = "";
@@ -1061,20 +1052,16 @@ function closeWin() {
 
 /* --------------------- Events --------------------- */
 btnMenu.addEventListener("click", () => toggleSheet());
-
 btnNew.addEventListener("click", () => startNewGame("smart"));
 btnDaily.addEventListener("click", () => startDailyChallenge(todayKey()));
-
 menuDaily.addEventListener("click", () => { closeSheet(); startDailyChallenge(todayKey()); });
 
 sheetBackdrop.addEventListener("click", closeSheet);
-
 sheet.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-new]");
     if (!btn) return;
-    const val = btn.getAttribute("data-new");
     closeSheet();
-    startNewGame(val);
+    startNewGame(btn.getAttribute("data-new"));
 });
 
 btnNotes.addEventListener("click", toggleNotes);
@@ -1110,17 +1097,18 @@ btnResetStats.addEventListener("click", () => {
 });
 
 btnCloseWin.addEventListener("click", closeWin);
-btnNextSmart.addEventListener("click", () => {
-    closeWin();
-    startNewGame("smart");
-});
-
+btnNextSmart.addEventListener("click", () => { closeWin(); startNewGame("smart"); });
 modalBackdrop.addEventListener("click", closeWin);
+
+/* resize recalculation */
+window.addEventListener("resize", () => { setPerfectMobileFitCellSize(); render(); });
+window.visualViewport?.addEventListener("resize", () => { setPerfectMobileFitCellSize(); render(); });
 
 /* --------------------- Boot --------------------- */
 function ensureState() {
     buildBoard();
     buildKeypad();
+    setPerfectMobileFitCellSize();
 
     const ok = loadState();
     if (!ok || !state.puzzle || state.puzzle.length !== 81) {
@@ -1133,7 +1121,6 @@ function ensureState() {
         if (state.notes.length !== 81) state.notes = Array.from({ length: 81 }, () => new Set());
         render();
     }
-
     startTimerLoop();
 }
 

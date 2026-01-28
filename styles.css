@@ -1,7 +1,6 @@
 :root {
     --bg: #070a10;
     --card: #0b0f16;
-    --card2: #0e1420;
     --text: #e9eefc;
     --muted: #99a6c3;
     --line: rgba(255, 255, 255, .10);
@@ -10,19 +9,17 @@
     --accent2: #2ee59d;
     --danger: #ff4d6d;
     --shadow: 0 16px 50px rgba(0, 0, 0, .45);
-    --radius: 18px;
     --radius2: 22px;
 
-    /* adaptive sizing */
-    --cell: clamp(34px, 9.5vw, 52px);
-    --gap: 14px;
+    /* JS overrides precisely */
+    --cell: 44px;
+    --gap: 12px;
 }
 
 @media (prefers-color-scheme: light) {
     :root {
         --bg: #f6f7fb;
         --card: #ffffff;
-        --card2: #f3f5ff;
         --text: #111827;
         --muted: #4b5563;
         --line: rgba(17, 24, 39, .12);
@@ -51,8 +48,6 @@ body {
         radial-gradient(900px 550px at 85% 15%, color-mix(in srgb, var(--accent2) 18%, transparent), transparent 55%),
         linear-gradient(180deg, var(--bg), var(--bg));
     color: var(--text);
-
-    /* Android address bar friendliness */
     height: 100dvh;
     overflow: hidden;
 }
@@ -62,26 +57,28 @@ body {
     display: flex;
     flex-direction: column;
     padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 .topbar {
-    padding: 14px 14px 10px;
+    padding: 12px 12px 8px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
+    flex: 0 0 auto;
 }
 
 .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
 }
 
 .logo {
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
     border-radius: 14px;
     background:
         radial-gradient(12px 12px at 30% 30%, rgba(255, 255, 255, .25), transparent 55%),
@@ -105,7 +102,7 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 56vw;
+    max-width: 55vw;
 }
 
 .top-actions {
@@ -120,7 +117,6 @@ body {
     padding: 10px 12px;
     border-radius: 14px;
     font-weight: 800;
-    letter-spacing: .2px;
     cursor: pointer;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -135,11 +131,6 @@ body {
     background: transparent;
 }
 
-.btn:focus {
-    outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-    outline-offset: 2px;
-}
-
 .btn[disabled] {
     opacity: .5;
     cursor: not-allowed;
@@ -147,26 +138,37 @@ body {
 }
 
 .main {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     display: grid;
     grid-template-columns: 1fr 360px;
     gap: var(--gap);
-    padding: 0 14px 14px;
-    min-height: 0;
+    padding: 0 12px 12px;
 }
 
-/* Mobile-first: stack */
-@media (max-width: 980px) {
+@media (min-width: 981px) {
     .main {
-        grid-template-columns: 1fr;
-        padding: 0 12px 12px;
-        gap: 12px;
+        padding: 0 14px 14px;
+        gap: 14px;
     }
 }
 
-.board-wrap {
+@media (max-width: 980px) {
+    .main {
+        grid-template-columns: 1fr;
+    }
+}
+
+.board-wrap,
+.controls {
     min-height: 0;
     display: flex;
+}
+
+.board-card,
+.control-card {
+    min-height: 0;
+    overflow: hidden;
 }
 
 .board-card {
@@ -177,14 +179,12 @@ body {
     box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
 }
 
 .board-header {
     display: flex;
-    gap: 10px;
-    padding: 12px 12px 10px;
+    gap: 8px;
+    padding: 10px 10px 8px;
     flex-wrap: wrap;
     align-items: center;
 }
@@ -201,11 +201,11 @@ body {
 
 .board {
     margin: 0 auto;
-    padding: 10px 10px 12px;
+    padding: 10px;
     display: grid;
     grid-template-columns: repeat(9, var(--cell));
     grid-template-rows: repeat(9, var(--cell));
-    gap: 0;
+    max-width: 100%;
     touch-action: manipulation;
 }
 
@@ -220,7 +220,6 @@ body {
     background: rgba(0, 0, 0, .10);
     cursor: pointer;
     user-select: none;
-
     transition: background .18s ease, transform .10s ease, border-color .18s ease, outline-color .18s ease;
 }
 
@@ -257,9 +256,8 @@ body {
 }
 
 .value {
-    font-size: 18px;
+    font-size: clamp(16px, calc(var(--cell) * .42), 22px);
     font-weight: 950;
-    letter-spacing: .2px;
     opacity: 0;
     transform: translateY(2px);
     animation: popIn .12s ease forwards;
@@ -272,14 +270,6 @@ body {
     }
 }
 
-.given .value {
-    color: color-mix(in srgb, var(--text) 92%, transparent);
-}
-
-.user .value {
-    color: color-mix(in srgb, var(--accent2) 92%, transparent);
-}
-
 .notes {
     position: absolute;
     inset: 4px;
@@ -287,21 +277,20 @@ body {
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
     gap: 1px;
-    opacity: .95;
 }
 
 .note {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: clamp(9px, calc(var(--cell) * .22), 12px);
     color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
 .board-footer {
-    padding: 8px 12px 12px;
+    padding: 8px 10px 10px;
     display: flex;
-    gap: 12px;
+    gap: 10px;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
@@ -332,7 +321,7 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 200px;
+    min-width: 180px;
 }
 
 .mini-label {
@@ -357,22 +346,16 @@ body {
     transition: width .22s ease;
 }
 
-.controls {
-    min-height: 0;
-    display: flex;
-}
-
 .control-card {
     width: 100%;
     background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02));
     border: 1px solid var(--line);
     border-radius: var(--radius2);
     box-shadow: var(--shadow);
-    padding: 12px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    min-height: 0;
+    gap: 10px;
 }
 
 .row {
@@ -396,15 +379,15 @@ body {
 .keypad {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    gap: 8px;
 }
 
 .key {
-    padding: 14px 12px;
+    padding: clamp(10px, 2.2vh, 14px) 10px;
     border-radius: 16px;
     border: 1px solid var(--line);
     background: rgba(0, 0, 0, .10);
-    font-size: 18px;
+    font-size: clamp(16px, 2.2vh, 20px);
     font-weight: 950;
     cursor: pointer;
     user-select: none;
@@ -417,36 +400,12 @@ body {
 }
 
 .key.small {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 900;
     color: var(--muted);
 }
 
-/* Make keypad denser on phones */
-@media (max-width: 520px) {
-    .control-card {
-        padding: 10px;
-    }
-
-    .keypad {
-        gap: 8px;
-    }
-
-    .key {
-        padding: 12px 10px;
-        border-radius: 14px;
-    }
-
-    .topbar {
-        padding: 12px 12px 8px;
-    }
-
-    .subtitle {
-        max-width: 64vw;
-    }
-}
-
-/* Sheet */
+/* Sheet / Modal */
 .sheet-backdrop,
 .modal-backdrop {
     position: fixed;
@@ -532,7 +491,6 @@ body {
     white-space: pre-line;
 }
 
-/* Modal */
 .modal {
     position: fixed;
     left: 50%;
