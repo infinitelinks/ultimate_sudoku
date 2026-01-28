@@ -3,12 +3,19 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0f16" />
-    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#070a10" />
     <title>Ultimate Sudoku</title>
 
-    <link rel="stylesheet" href="styles.css" />
+    <!-- PWA -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+
+    <!-- iOS basic (works even without full install prompt) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <link rel="stylesheet" href="./styles.css" />
 </head>
 
 <body>
@@ -23,9 +30,9 @@
             </div>
 
             <div class="top-actions">
-                <button class="btn ghost" id="btnDaily" title="Daily Challenge">Daily</button>
-                <button class="btn ghost" id="btnNew" title="New game">New</button>
-                <button class="btn ghost" id="btnMenu" title="Menu">Menu</button>
+                <button class="btn" id="btnDaily" type="button">Daily</button>
+                <button class="btn" id="btnNew" type="button">New</button>
+                <button class="btn ghost" id="btnMenu" type="button">Menu</button>
             </div>
         </header>
 
@@ -38,16 +45,16 @@
                         <div class="pill" id="pillTimer">00:00</div>
                     </div>
 
-                    <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+                    <div class="board" id="board" aria-label="Sudoku board"></div>
 
                     <div class="board-footer">
                         <div class="toggles">
                             <label class="toggle">
-                                <input type="checkbox" id="toggleConflicts" checked />
+                                <input id="toggleConflicts" type="checkbox" checked />
                                 <span>Conflicts</span>
                             </label>
                             <label class="toggle">
-                                <input type="checkbox" id="toggleAutoNotes" />
+                                <input id="toggleAutoNotes" type="checkbox" />
                                 <span>Auto-notes</span>
                             </label>
                         </div>
@@ -62,90 +69,96 @@
                 </div>
             </section>
 
-            <section class="controls">
+            <aside class="controls">
                 <div class="control-card">
                     <div class="row">
-                        <button class="btn" id="btnNotes">Notes: Off</button>
-                        <button class="btn" id="btnErase">Erase</button>
-                        <button class="btn" id="btnUndo">Undo</button>
-                        <button class="btn" id="btnRedo">Redo</button>
+                        <button class="btn" id="btnNotes" type="button">Notes: Off</button>
+                        <button class="btn" id="btnErase" type="button">Erase</button>
+                        <button class="btn" id="btnUndo" type="button">Undo</button>
+                        <button class="btn" id="btnRedo" type="button">Redo</button>
                     </div>
-
-                    <div class="keypad" id="keypad" aria-label="Number keypad"></div>
 
                     <div class="row compact">
-                        <button class="btn ghost" id="btnRestart">Restart</button>
-                        <button class="btn ghost" id="btnPause">Pause</button>
-                        <span class="status" id="statusText">Tap a cell to begin.</span>
+                        <button class="btn" id="btnRestart" type="button">Restart</button>
+                        <button class="btn" id="btnPause" type="button">Pause</button>
+                        <div class="status" id="statusText">Tap a cell to begin.</div>
                     </div>
+
+                    <div class="keypad" id="keypad" aria-label="Number pad"></div>
                 </div>
-            </section>
+            </aside>
         </main>
+    </div>
 
-        <!-- Bottom sheet menu -->
-        <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
-        <div class="sheet" id="sheet" aria-hidden="true">
-            <div class="sheet-handle" id="sheetHandle"></div>
-            <div class="sheet-content">
-                <div class="sheet-title">Menu</div>
+    <!-- Bottom sheet -->
+    <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+    <div class="sheet" id="sheet" aria-hidden="true">
+        <div class="sheet-handle" id="sheetHandle"></div>
+        <div class="sheet-content">
+            <div class="sheet-title">Menu</div>
 
-                <div class="sheet-group">
-                    <div class="sheet-label">Play</div>
-                    <div class="grid-2">
-                        <button class="btn" id="menuDaily">Daily Challenge</button>
-                        <button class="btn" data-new="smart">Smart (Adaptive)</button>
-                        <button class="btn" data-new="moderate">Moderate</button>
-                        <button class="btn" data-new="hard">Hard</button>
-                        <button class="btn" data-new="pro">Pro</button>
-                    </div>
+            <div class="sheet-group">
+                <div class="sheet-label">Play</div>
+                <div class="grid-2">
+                    <button class="btn" id="menuDaily" type="button">Daily Challenge</button>
+                    <button class="btn" data-new="smart" type="button">Smart (Adaptive)</button>
+                    <button class="btn" data-new="moderate" type="button">Moderate</button>
+                    <button class="btn" data-new="hard" type="button">Hard</button>
+                    <button class="btn" data-new="pro" type="button">Pro</button>
                 </div>
-
-                <div class="sheet-group">
-                    <div class="sheet-label">Options</div>
-                    <div class="grid-2">
-                        <button class="btn ghost" id="btnClearNotes">Clear notes</button>
-                        <button class="btn ghost" id="btnClearAll">Clear all user input</button>
-                    </div>
-                </div>
-
-                <div class="sheet-group">
-                    <div class="sheet-label">Daily</div>
-                    <div class="stats" id="dailyBox"></div>
-                </div>
-
-                <div class="sheet-group">
-                    <div class="sheet-label">Stats</div>
-                    <div class="stats" id="statsBox"></div>
-                    <button class="btn ghost" id="btnResetStats">Reset stats</button>
-                </div>
-
-                <div class="sheet-group">
-                    <div class="hint">
-                        Smart mode adapts using solve time + mistakes. Daily Challenge is deterministic per date and
-                        works fully offline.
-                    </div>
+                <div class="hint">Smart mode adapts using solve time + mistakes. Daily Challenge works fully offline.
                 </div>
             </div>
-        </div>
 
-        <!-- Win modal -->
-        <div class="modal-backdrop" id="modalBackdrop" hidden></div>
-        <div class="modal" id="modalWin" hidden role="dialog" aria-modal="true" aria-label="Puzzle complete">
-            <div class="modal-title" id="winTitle">Puzzle complete</div>
-            <div class="modal-body" id="winBody"></div>
-            <div class="modal-actions">
-                <button class="btn ghost" id="btnCloseWin">Close</button>
-                <button class="btn" id="btnNextSmart">Next (Smart)</button>
+            <div class="sheet-group">
+                <div class="sheet-label">Options</div>
+                <div class="grid-2">
+                    <button class="btn" id="btnClearNotes" type="button">Clear notes</button>
+                    <button class="btn" id="btnClearAll" type="button">Clear all user input</button>
+                </div>
+            </div>
+
+            <div class="sheet-group">
+                <div class="sheet-label">Daily</div>
+                <div class="stats" id="dailyBox"></div>
+            </div>
+
+            <div class="sheet-group">
+                <div class="sheet-label">Stats</div>
+                <div class="stats" id="statsBox"></div>
+                <div style="margin-top:10px">
+                    <button class="btn" id="btnResetStats" type="button">Reset stats</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Win modal -->
+    <div class="modal-backdrop" id="modalBackdrop" hidden></div>
+    <div class="modal" id="modalWin" hidden>
+        <div class="modal-title" id="winTitle">Puzzle complete</div>
+        <div class="modal-body" id="winBody"></div>
+        <div class="modal-actions">
+            <button class="btn ghost" id="btnCloseWin" type="button">Close</button>
+            <button class="btn" id="btnNextSmart" type="button">Next (Smart)</button>
+        </div>
+    </div>
+
     <script>
+        // Register SW (offline)
         if ("serviceWorker" in navigator) {
-            window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
+            window.addEventListener("load", async () => {
+                try {
+                    // IMPORTANT: keep relative path so it works on GitHub Pages subfolder
+                    await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+                } catch (e) {
+                    // no alerts: silent fail
+                    console.log("SW register failed:", e);
+                }
+            });
         }
     </script>
+    <script defer src="./app.js"></script>
 </body>
 
 </html>
