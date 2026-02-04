@@ -1,11 +1,11 @@
 /* Ultimate Sudoku PWA
-   - Offline (Service Worker)
+   - Offline
    - System theme (CSS)
    - Adaptive generator (Smart)
    - Daily Challenge (seeded per date, offline)
    - Mobile fit: board-first sizing so Sudoku always fully visible
-   - APK download button (Android mobile-only, hides when installed / already clicked)
-   - Win FX: confetti + theme-matched per-letter sparkles + banner + haptic + sound
+   - APK download button (mobile-only, hides when installed / already clicked)
+   - WIN FX: YOU WON banner + animated subtext + haptic + sparkles (daily vs normal)
 */
 
 const $ = (s) => document.querySelector(s);
@@ -52,42 +52,37 @@ const winBody = $("#winBody");
 const btnCloseWin = $("#btnCloseWin");
 const btnNextSmart = $("#btnNextSmart");
 
-// APK download UI
+// ✅ APK download UI
 const btnDownloadApk = $("#btnDownloadApk");
 const apkHint = $("#apkHint");
 
-// FX DOM
-const boardCardEl = document.querySelector(".board-card");
-const fxCanvas = document.getElementById("fxCanvas");
-const fxCtx = fxCanvas ? fxCanvas.getContext("2d") : null;
-
-const winBanner = document.getElementById("winBanner");
-const winBannerTitle = document.getElementById("winBannerTitle");
-const winBannerSub = document.getElementById("winBannerSub");
+// ✅ WIN FX elements
+const winFx = $("#winFx");
+const winFxCanvas = $("#winFxCanvas");
+const winFxBanner = $("#winFxBanner");
+const winFxSub = $("#winFxSub");
 
 const LS_KEY = "ultimate_sudoku_state_v2";
 const STATS_KEY = "ultimate_sudoku_stats_v2";
 const DAILY_KEY = "ultimate_sudoku_daily_v1";
 
-/* --------------------- APK download (Android mobile only, auto-hide) --------------------- */
-function isMobileBrowserAndroid() {
+/* --------------------- APK download (mobile only, auto-hide) --------------------- */
+function isMobileBrowser() {
     const w = window.visualViewport?.width ?? window.innerWidth;
     const ua = navigator.userAgent || "";
     const touch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
-    const isAndroid = /Android/i.test(ua);
-    return (w <= 980) && touch && isAndroid;
+    const phoneUA = /Android|iPhone|iPad|iPod/i.test(ua);
+    return (w <= 980) && touch && phoneUA;
 }
 function isStandalonePWA() {
-    return window.__PWA_INSTALLED__ === true ||
-        window.matchMedia?.("(display-mode: standalone)")?.matches ||
-        (navigator.standalone === true);
+    return window.matchMedia?.("(display-mode: standalone)")?.matches || (navigator.standalone === true);
 }
 function apkAlreadyClicked() {
     return localStorage.getItem("ultimate_sudoku_apk_downloaded") === "1";
 }
 function updateApkButtonVisibility() {
     if (!btnDownloadApk) return;
-    const shouldShow = isMobileBrowserAndroid() && !isStandalonePWA() && !apkAlreadyClicked();
+    const shouldShow = isMobileBrowser() && !isStandalonePWA() && !apkAlreadyClicked();
     btnDownloadApk.style.display = shouldShow ? "inline-flex" : "none";
     if (apkHint) apkHint.style.display = shouldShow ? "block" : "none";
 }
@@ -145,7 +140,6 @@ function setPerfectMobileFitCellSize() {
 
     let cell = Math.min(maxByWidth, maxByHeight);
     cell = Math.max(24, Math.min(cell, 54));
-
     document.documentElement.style.setProperty("--cell", `${cell}px`);
 }
 
@@ -296,19 +290,6 @@ function statsText() {
     ].join("\n");
 }
 
-function loadDailyState() {
-    try {
-        const raw = localStorage.getItem(DAILY_KEY);
-        if (!raw) return { history: {} };
-        const d = JSON.parse(raw);
-        if (!d.history) d.history = {};
-        return d;
-    } catch {
-        return { history: {} };
-    }
-}
-function saveDailyState(d) { localStorage.setItem(DAILY_KEY, JSON.stringify(d)); }
-
 function dailyText() {
     const s = loadStats();
     const streak = s.daily.streak ?? 0;
@@ -359,7 +340,6 @@ function shuffle(arr, rnd = Math.random) {
 
 function generateSolvedGrid(rnd = Math.random) {
     const grid = emptyGrid();
-
     function pickNextCell() {
         let best = -1;
         let bestCount = 10;
@@ -375,7 +355,6 @@ function generateSolvedGrid(rnd = Math.random) {
         }
         return best;
     }
-
     function dfs() {
         const i = pickNextCell();
         if (i === -1) return true;
@@ -387,7 +366,6 @@ function generateSolvedGrid(rnd = Math.random) {
         }
         return false;
     }
-
     dfs();
     return grid;
 }
@@ -494,7 +472,6 @@ function bandOk(band, targetBand, score, scoreRange) {
     if (targetBand === "hard") return ((band === "hard" || band === "pro") && score >= scoreRange[0] && score <= scoreRange[1]);
     return (band === "pro" && score >= scoreRange[0]);
 }
-
 function betterMatch(a, b, targetBand, scoreRange) {
     const dist = (x) => {
         const s = x.score;
@@ -559,6 +536,20 @@ function generatePuzzle(targetBand, rnd = Math.random) {
     return { puzzle: best.puzzle, solution, meta: { targetBand, rating: best.rating } };
 }
 
+/* --------------------- Daily storage --------------------- */
+function loadDailyState() {
+    try {
+        const raw = localStorage.getItem(DAILY_KEY);
+        if (!raw) return { history: {} };
+        const d = JSON.parse(raw);
+        if (!d.history) d.history = {};
+        return d;
+    } catch {
+        return { history: {} };
+    }
+}
+function saveDailyState(d) { localStorage.setItem(DAILY_KEY, JSON.stringify(d)); }
+
 /* --------------------- Game state --------------------- */
 let state = {
     mode: "smart",
@@ -573,6 +564,7 @@ let state = {
     selected: -1,
     conflictsOn: true,
     autoNotes: false,
+    startTs: 0,
     elapsed: 0,
     running: true,
     mistakes: 0,
@@ -625,14 +617,6 @@ function buildBoard() {
 
         boardEl.appendChild(cell);
     }
-}
-function moveSel(delta) {
-    if (state.selected < 0) return;
-    let next = state.selected + delta;
-    if (next < 0) next = 0;
-    if (next > 80) next = 80;
-    state.selected = next;
-    render(); saveState();
 }
 
 function buildKeypad() {
@@ -771,7 +755,7 @@ function render() {
     toggleConflicts.checked = state.conflictsOn;
     toggleAutoNotes.checked = state.autoNotes;
 
-    if (!state.running) statusText.textContent = "Paused — tap Resume.";
+    if (!state.running) statusText.textContent = "Paused.";
     else if (state.selected < 0) statusText.textContent = "Tap a cell to begin.";
     else statusText.textContent = state.notesMode ? "Notes mode: tap numbers to add/remove." : "Enter a number.";
 
@@ -781,6 +765,15 @@ function render() {
 
 /* --------------------- Actions --------------------- */
 function selectCell(i) { state.selected = i; render(); saveState(); }
+
+function moveSel(delta) {
+    if (state.selected < 0) state.selected = 0;
+    let n = state.selected + delta;
+    n = clamp(n, 0, 80);
+    state.selected = n;
+    render(); saveState();
+}
+
 function pushHistory() {
     state.history.push({
         userGrid: state.userGrid.slice(),
@@ -790,6 +783,7 @@ function pushHistory() {
     if (state.history.length > 140) state.history.shift();
     state.future = [];
 }
+
 function clearNoteInPeers(i, n) {
     const r = rowOf(i), c = colOf(i);
     for (let k = 0; k < 9; k++) {
@@ -810,6 +804,7 @@ function recomputeAutoNotes() {
         return new Set(computeCandidates(state.userGrid, i));
     });
 }
+
 function setValue(n) {
     if (!state.running) return;
     const i = state.selected;
@@ -821,22 +816,20 @@ function setValue(n) {
         const s = state.notes[i];
         if (s.has(n)) s.delete(n); else s.add(n);
     } else {
-        const prev = state.userGrid[i];
         state.userGrid[i] = n;
-
-        if (state.solution[i] !== 0 && n !== state.solution[i] && prev !== n) {
-            state.mistakes += 1;
-        }
-
+        if (state.solution[i] !== 0 && n !== state.solution[i]) state.mistakes += 1;
         if (state.autoNotes) {
             clearNoteInPeers(i, n);
             state.notes[i].clear();
         }
     }
 
-    if (isSolvedCorrect()) onWin();
+    // ✅ NEW: win detection is FULL + NO CONFLICTS (works even if solution array changes on refresh)
+    maybeWin();
+
     render(); saveState();
 }
+
 function eraseValue() {
     if (!state.running) return;
     const i = state.selected;
@@ -847,7 +840,9 @@ function eraseValue() {
     if (state.autoNotes) recomputeAutoNotes();
     render(); saveState();
 }
+
 function toggleNotes() { state.notesMode = !state.notesMode; render(); saveState(); }
+
 function undo() {
     const prev = state.history.pop();
     if (!prev) return;
@@ -861,6 +856,7 @@ function undo() {
     state.mistakes = prev.mistakes ?? state.mistakes;
     render(); saveState();
 }
+
 function redo() {
     const next = state.future.pop();
     if (!next) return;
@@ -874,17 +870,21 @@ function redo() {
     state.mistakes = next.mistakes ?? state.mistakes;
     render(); saveState();
 }
+
 function restartPuzzle() {
     pushHistory();
     state.userGrid = state.puzzle.slice();
     state.notes = Array.from({ length: 81 }, () => new Set());
     state.mistakes = 0;
     state.elapsed = 0;
+    state.startTs = nowMs();
     state.running = true;
     closeWin();
+    hideWinFx(true);
     if (state.autoNotes) recomputeAutoNotes();
     render(); saveState();
 }
+
 function clearNotes() {
     pushHistory();
     state.notes = Array.from({ length: 81 }, () => new Set());
@@ -900,332 +900,287 @@ function clearAllUserInput() {
     render(); saveState();
 }
 
-/* --------------------- Win/Timer --------------------- */
-function isSolvedCorrect() {
+/* --------------------- Win / Timer --------------------- */
+
+// legacy exact-match check (kept for reference, not used for win)
+function isSolvedCorrectExact() {
     for (let i = 0; i < 81; i++) {
         if (state.userGrid[i] !== state.solution[i]) return false;
     }
     return true;
 }
 
-/* --------------------- FX: banner, confetti, sparkles, sound, haptic --------------------- */
-function resizeFxCanvas() {
-    if (!fxCanvas || !fxCtx) return;
+// ✅ Correct win logic for real-world (Daily survives refresh, etc.)
+function maybeWin() {
+    if (countNonZero(state.userGrid) !== 81) return;
+    const conflicts = computeConflicts(state.userGrid);
+    if (conflicts.size !== 0) return;
+    onWin();
+}
+
+function androidHapticBuzz() {
+    try {
+        // small buzz (Android chrome supports)
+        if (navigator.vibrate) navigator.vibrate(18);
+    } catch { }
+}
+
+/* ---------- Win FX: YOU WON + sparkles ---------- */
+let fx = {
+    running: false,
+    ctx: null,
+    w: 0, h: 0,
+    particles: [],
+    t0: 0,
+    raf: 0,
+    anchors: [],        // letter anchor points
+    style: "normal"     // "daily" | "normal"
+};
+
+function resizeWinCanvas() {
+    if (!winFxCanvas) return;
     const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    fxCanvas.width = Math.floor(window.innerWidth * dpr);
-    fxCanvas.height = Math.floor(window.innerHeight * dpr);
-    fxCanvas.style.width = window.innerWidth + "px";
-    fxCanvas.style.height = window.innerHeight + "px";
-    fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const rect = winFxCanvas.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width));
+    const h = Math.max(1, Math.floor(rect.height));
+    winFxCanvas.width = Math.floor(w * dpr);
+    winFxCanvas.height = Math.floor(h * dpr);
+    fx.w = w; fx.h = h;
+    fx.ctx = winFxCanvas.getContext("2d");
+    fx.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-let fxRaf = null;
-let fxParticles = [];
+function cssVar(name) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || "#ffffff";
+}
 
-function fxEnsureLoop() {
-    if (fxRaf) return;
+function spawnSpark(x, y, mode) {
+    // mode: "daily" = more starburst, "normal" = smooth trail
+    const a = cssVar("--sparkA");
+    const b = cssVar("--sparkB");
+    const c = cssVar("--sparkC");
+    const pick = (Math.random() < 0.45) ? a : (Math.random() < 0.7 ? b : c);
 
-    function step() {
-        if (!fxCanvas || !fxCtx) { fxRaf = null; return; }
+    const baseN = (mode === "daily") ? 7 : 5;
+    const extra = (Math.random() < 0.25) ? 4 : 0;
+    const n = baseN + extra;
 
-        if (!fxParticles.length) {
-            fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-            fxRaf = null;
-            return;
-        }
+    for (let i = 0; i < n; i++) {
+        const ang = (mode === "daily")
+            ? (Math.random() * Math.PI * 2)
+            : (Math.random() * Math.PI * 1.4 - Math.PI * 0.7);
 
-        fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        const sp = (mode === "daily")
+            ? (0.9 + Math.random() * 2.8)
+            : (0.6 + Math.random() * 2.0);
 
-        const alive = [];
-        for (const p of fxParticles) {
-            p.life++;
-            if (p.life > p.ttl) continue;
-
-            p.vx *= p.drag;
-            p.vy = p.vy * p.drag + p.g;
-
-            p.x += p.vx;
-            p.y += p.vy;
-
-            if (p.rot != null) p.rot += p.vr;
-
-            const t = 1 - (p.life / p.ttl);
-            fxCtx.globalAlpha = Math.max(0, Math.min(1, t)) * (p.a ?? 1);
-
-            if (p.kind === "confetti") {
-                fxCtx.save();
-                fxCtx.translate(p.x, p.y);
-                fxCtx.rotate(p.rot || 0);
-                fxCtx.fillStyle = p.c;
-                fxCtx.fillRect(-p.r, -p.r * 0.55, p.r * 2.2, p.r * 1.1);
-                fxCtx.restore();
-            } else if (p.kind === "sparkle") {
-                fxCtx.save();
-                fxCtx.translate(p.x, p.y);
-                fxCtx.rotate(p.rot || 0);
-                fxCtx.fillStyle = p.c;
-                drawStar(fxCtx, 0, 0, p.r, p.r * 0.55, 4);
-                fxCtx.restore();
-            }
-
-            alive.push(p);
-        }
-
-        fxCtx.globalAlpha = 1;
-        fxParticles = alive;
-        fxRaf = requestAnimationFrame(step);
+        fx.particles.push({
+            x, y,
+            vx: Math.cos(ang) * sp,
+            vy: Math.sin(ang) * sp - (mode === "daily" ? 0.6 : 0.2),
+            life: 0,
+            max: (mode === "daily") ? (520 + Math.random() * 380) : (420 + Math.random() * 320),
+            r: (mode === "daily") ? (1.6 + Math.random() * 2.6) : (1.2 + Math.random() * 2.2),
+            col: pick,
+            spin: (Math.random() * 2 - 1) * 0.18,
+            shape: (mode === "daily" && Math.random() < 0.5) ? "star" : "dot"
+        });
     }
-
-    fxRaf = requestAnimationFrame(step);
 }
 
-function drawStar(ctx, x, y, outerR, innerR, points = 4) {
-    const step = Math.PI / points;
+function drawStar(ctx, x, y, r, rot) {
+    const spikes = 5;
+    const r2 = r * 0.45;
     ctx.beginPath();
-    for (let i = 0; i < points * 2; i++) {
-        const r = (i % 2 === 0) ? outerR : innerR;
-        const a = i * step;
-        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    for (let i = 0; i < spikes * 2; i++) {
+        const rr = (i % 2 === 0) ? r : r2;
+        const a = rot + (i * Math.PI / spikes);
+        ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
     }
     ctx.closePath();
     ctx.fill();
 }
 
-function colorMixRGBA(color, a) {
-    color = (color || "").trim();
-    if (color.startsWith("#")) {
-        let hex = color.slice(1);
-        if (hex.length === 3) hex = hex.split("").map(ch => ch + ch).join("");
-        const n = parseInt(hex, 16);
-        const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-        return `rgba(${r},${g},${b},${a})`;
+function stepFx(ts) {
+    if (!fx.running) return;
+    if (!fx.t0) fx.t0 = ts;
+    const dt = Math.min(32, ts - fx.t0);
+    fx.t0 = ts;
+
+    const ctx = fx.ctx;
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, fx.w, fx.h);
+
+    // gentle vignette bloom
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = cssVar("--sparkA");
+    ctx.beginPath();
+    ctx.arc(fx.w * 0.5, fx.h * 0.42, Math.min(fx.w, fx.h) * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // spawn per-letter sparkles briefly
+    // (anchors get populated when banner is built)
+    if (fx.anchors.length) {
+        const burstChance = (fx.style === "daily") ? 0.85 : 0.65;
+        const perFrame = (fx.style === "daily") ? 3 : 2;
+        for (let k = 0; k < perFrame; k++) {
+            if (Math.random() < burstChance) {
+                const a = fx.anchors[(Math.random() * fx.anchors.length) | 0];
+                spawnSpark(a.x + (Math.random() * 12 - 6), a.y + (Math.random() * 10 - 5), fx.style);
+            }
+        }
     }
-    if (color.startsWith("rgb")) {
-        const nums = color.match(/[\d.]+/g)?.map(Number) || [255, 255, 255];
-        const r = nums[0] ?? 255, g = nums[1] ?? 255, b = nums[2] ?? 255;
-        return `rgba(${r},${g},${b},${a})`;
+
+    // update + draw particles
+    const g = (fx.style === "daily") ? 0.012 : 0.009;
+    for (let i = fx.particles.length - 1; i >= 0; i--) {
+        const p = fx.particles[i];
+        p.life += dt;
+        if (p.life >= p.max) { fx.particles.splice(i, 1); continue; }
+
+        p.vy += g * dt;
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+
+        const t = p.life / p.max;
+        const alpha = (t < 0.15) ? (t / 0.15) : (t > 0.8 ? (1 - t) / 0.2 : 1);
+        const rr = p.r * (1 - t * 0.35);
+
+        ctx.save();
+        ctx.globalAlpha = 0.85 * alpha;
+        ctx.fillStyle = p.col;
+
+        if (p.shape === "star") {
+            drawStar(ctx, p.x, p.y, rr * 1.25, p.life * 0.01 * p.spin);
+        } else {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
     }
-    return `rgba(255,255,255,${a})`;
+
+    fx.raf = requestAnimationFrame(stepFx);
 }
 
-function getThemePalette(mode) {
-    const root = getComputedStyle(document.documentElement);
-    const accent = root.getPropertyValue("--accent").trim() || "#7c5cff";
-    const accent2 = root.getPropertyValue("--accent2").trim() || "#2ee59d";
-    const text = root.getPropertyValue("--text").trim() || "#e9eefc";
-    const light = window.matchMedia?.("(prefers-color-scheme: light)")?.matches;
+function buildWinBannerText(text) {
+    winFxBanner.innerHTML = "";
+    fx.anchors = [];
 
-    if (mode === "daily") {
-        return light
-            ? ["rgba(79,70,229,0.85)", "rgba(5,150,105,0.85)", "rgba(245,158,11,0.85)", "rgba(255,255,255,0.90)"]
-            : [colorMixRGBA(accent, 0.85), colorMixRGBA(accent2, 0.85), "rgba(255,214,110,0.90)", "rgba(255,255,255,0.90)"];
-    }
-
-    return light
-        ? ["rgba(79,70,229,0.85)", "rgba(5,150,105,0.85)", "rgba(17,24,39,0.35)", "rgba(255,255,255,0.90)"]
-        : [colorMixRGBA(accent, 0.90), colorMixRGBA(accent2, 0.90), colorMixRGBA(text, 0.45), "rgba(255,255,255,0.90)"];
-}
-
-function confettiBurst(mode) {
-    if (!fxCanvas || !fxCtx) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-
-    resizeFxCanvas();
-    const W = window.innerWidth, H = window.innerHeight;
-    const originX = W * 0.5;
-    const originY = H * 0.35;
-
-    const energetic = (mode === "daily");
-    const count = energetic ? Math.min(280, Math.max(160, Math.floor(W / 4)))
-        : Math.min(220, Math.max(120, Math.floor(W / 5)));
-
-    for (let i = 0; i < count; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speedBase = energetic ? 4.4 : 3.6;
-        const speed = speedBase + Math.random() * (energetic ? 7.4 : 6.2);
-
-        fxParticles.push({
-            kind: "confetti",
-            x: originX,
-            y: originY,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed - (energetic ? 3.2 : 2.6),
-            r: 2 + Math.random() * 4,
-            rot: Math.random() * Math.PI,
-            vr: (Math.random() - 0.5) * 0.28,
-            life: 0,
-            ttl: energetic ? (85 + Math.random() * 50) : (75 + Math.random() * 45),
-            a: 1,
-            g: energetic ? 0.18 : 0.16,
-            drag: 0.995,
-            c: `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`
-        });
-    }
-
-    fxEnsureLoop();
-}
-
-function setTitleAsSpans(el, text) {
-    el.innerHTML = "";
-    for (const ch of text) {
+    const frag = document.createDocumentFragment();
+    const chars = [...text];
+    chars.forEach((ch, i) => {
         const s = document.createElement("span");
-        s.textContent = ch === " " ? "\u00A0" : ch;
-        s.style.display = "inline-block";
-        el.appendChild(s);
-    }
-}
-
-function letterSparkles({ titleEl, subEl, mode }) {
-    if (!fxCanvas || !fxCtx || !titleEl) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-
-    resizeFxCanvas();
-    const palette = getThemePalette(mode);
-
-    const perLetter = (mode === "daily") ? 6 : 4;
-    const ttlBase = (mode === "daily") ? 44 : 40;
-    const drift = (mode === "daily") ? 1.25 : 1.05;
-
-    const letters = Array.from(titleEl.querySelectorAll("span"));
-
-    letters.forEach((span, i) => {
-        const r = span.getBoundingClientRect();
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height * 0.72;
-
-        setTimeout(() => {
-            for (let k = 0; k < perLetter; k++) {
-                fxParticles.push({
-                    kind: "sparkle",
-                    x: cx + (Math.random() - 0.5) * 10,
-                    y: cy + (Math.random() - 0.5) * 8,
-                    vx: (Math.random() - 0.5) * 0.55,
-                    vy: (-0.9 - Math.random() * 1.4) * drift,
-                    r: 1.6 + Math.random() * 2.6,
-                    rot: Math.random() * Math.PI,
-                    vr: (Math.random() - 0.5) * 0.22,
-                    life: 0,
-                    ttl: ttlBase + Math.random() * 24,
-                    a: 0.9,
-                    g: 0.03,
-                    drag: 0.992,
-                    c: palette[Math.floor(Math.random() * palette.length)]
-                });
-            }
-            fxEnsureLoop();
-        }, i * (260 / Math.max(1, letters.length)));
+        s.className = "wchar";
+        s.textContent = ch;
+        s.style.animationDelay = (0.04 * i) + "s";
+        frag.appendChild(s);
     });
+    winFxBanner.appendChild(frag);
 
-    if (subEl) {
-        setTimeout(() => {
-            const rs = subEl.getBoundingClientRect();
-            const cx = rs.left + rs.width / 2;
-            const cy = rs.top + rs.height * 0.6;
-
-            const extra = (mode === "daily") ? 26 : 18;
-            for (let k = 0; k < extra; k++) {
-                fxParticles.push({
-                    kind: "sparkle",
-                    x: cx + (Math.random() - 0.5) * Math.min(220, rs.width),
-                    y: cy + (Math.random() - 0.5) * 12,
-                    vx: (Math.random() - 0.5) * 0.45,
-                    vy: (-0.7 - Math.random() * 1.0) * drift,
-                    r: 1.2 + Math.random() * 2.1,
-                    rot: Math.random() * Math.PI,
-                    vr: (Math.random() - 0.5) * 0.18,
-                    life: 0,
-                    ttl: 34 + Math.random() * 22,
-                    a: 0.75,
-                    g: 0.02,
-                    drag: 0.993,
-                    c: palette[Math.floor(Math.random() * palette.length)]
-                });
-            }
-            fxEnsureLoop();
-        }, 220);
-    }
-}
-
-function showWinBanner({ title = "YOU WON!", timeSec = 0, mistakes = 0, mode = "normal" } = {}) {
-    if (!winBanner || !winBannerTitle || !winBannerSub) return;
-
-    setTitleAsSpans(winBannerTitle, title);
-    winBannerSub.textContent = `Time: ${formatTime(timeSec)} • Mistakes: ${mistakes}`;
-
-    winBanner.hidden = false;
-    winBanner.classList.remove("show");
-    void winBanner.offsetWidth;
-    winBanner.classList.add("show");
-
+    // after layout, compute anchor points (center of each letter)
     requestAnimationFrame(() => {
-        letterSparkles({ titleEl: winBannerTitle, subEl: winBannerSub, mode });
-    });
-
-    setTimeout(() => {
-        winBanner.classList.remove("show");
-        winBanner.hidden = true;
-    }, 1200);
-}
-
-function tryHapticWin() {
-    try {
-        if (!("vibrate" in navigator)) return;
-        if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-        navigator.vibrate([18, 25, 18]);
-    } catch { }
-}
-
-function victorySound() {
-    try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        const ctx = new AC();
-
-        const master = ctx.createGain();
-        master.gain.value = 0.12;
-        master.connect(ctx.destination);
-
-        const now = ctx.currentTime;
-        const tones = [
-            { f: 523.25, t: 0.00 },
-            { f: 659.25, t: 0.10 },
-            { f: 783.99, t: 0.20 },
-            { f: 1046.50, t: 0.32 }
-        ];
-
-        tones.forEach(({ f, t }) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = "triangle";
-            osc.frequency.setValueAtTime(f, now + t);
-
-            gain.gain.setValueAtTime(0.0001, now + t);
-            gain.gain.exponentialRampToValueAtTime(0.9, now + t + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.14);
-
-            osc.connect(gain);
-            gain.connect(master);
-
-            osc.start(now + t);
-            osc.stop(now + t + 0.16);
+        const rectBanner = winFxBanner.getBoundingClientRect();
+        const spans = winFxBanner.querySelectorAll(".wchar");
+        const anchors = [];
+        spans.forEach(sp => {
+            const r = sp.getBoundingClientRect();
+            anchors.push({
+                x: (r.left + r.right) * 0.5,
+                y: (r.top + r.bottom) * 0.5
+            });
         });
-
-        setTimeout(() => ctx.close?.(), 900);
-    } catch { }
+        // convert to canvas space (same as viewport)
+        fx.anchors = anchors.map(a => ({ x: a.x, y: a.y }));
+        // add initial pop burst
+        for (const a of fx.anchors) {
+            if (Math.random() < 0.55) spawnSpark(a.x, a.y, fx.style);
+        }
+    });
 }
 
-function playWinFX({ title, timeSec, mistakes, mode = "normal" } = {}) {
-    if (boardCardEl) {
-        boardCardEl.classList.remove("winfx");
-        void boardCardEl.offsetWidth;
-        boardCardEl.classList.add("winfx");
-    }
-    modalWin.classList.add("winfx");
+function showWinFx({ isDaily, timeSec, mistakes }) {
+    if (!winFx) return;
 
-    confettiBurst(mode);
-    victorySound();
-    showWinBanner({ title, timeSec, mistakes, mode });
-    tryHapticWin();
+    fx.style = isDaily ? "daily" : "normal";
+
+    winFx.hidden = false;
+    winFx.setAttribute("aria-hidden", "false");
+    winFx.classList.remove("fadeout");
+    winFx.classList.add("show");
+
+    // Build banner
+    const bannerText = "YOU WON!";
+    buildWinBannerText(bannerText);
+
+    // Animated subtext (counts up)
+    const targetTime = Math.max(0, Math.floor(timeSec));
+    const targetMist = Math.max(0, Math.floor(mistakes));
+    const label = isDaily ? "Daily cleared" : "Puzzle cleared";
+
+    let subStart = nowMs();
+    const dur = 800;
+
+    function subTick() {
+        const t = clamp((nowMs() - subStart) / dur, 0, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const curT = Math.floor(targetTime * eased);
+        const curM = Math.floor(targetMist * eased);
+
+        winFxSub.textContent =
+            `${label}\nTime: ${formatTime(curT)}   •   Mistakes: ${curM}`;
+
+        if (t < 1) requestAnimationFrame(subTick);
+    }
+    subTick();
+
+    // haptic (Android)
+    androidHapticBuzz();
+
+    // canvas setup + start particles
+    resizeWinCanvas();
+    fx.particles = [];
+    fx.t0 = 0;
+    fx.running = true;
+    if (fx.raf) cancelAnimationFrame(fx.raf);
+    fx.raf = requestAnimationFrame(stepFx);
+
+    // gentle center trail burst
+    const cx = (window.innerWidth || fx.w) * 0.5;
+    const cy = (window.innerHeight || fx.h) * 0.42;
+    for (let i = 0; i < (isDaily ? 18 : 12); i++) spawnSpark(cx, cy, fx.style);
+
+    // Auto fade out banner overlay after a moment (but modal still available)
+    setTimeout(() => {
+        hideWinFx(false);
+    }, isDaily ? 2600 : 2200);
+}
+
+function hideWinFx(immediate) {
+    if (!winFx) return;
+
+    fx.running = false;
+    if (fx.raf) cancelAnimationFrame(fx.raf);
+    fx.raf = 0;
+
+    if (immediate) {
+        winFx.classList.remove("show");
+        winFx.hidden = true;
+        winFx.setAttribute("aria-hidden", "true");
+        return;
+    }
+
+    winFx.classList.add("fadeout");
+    setTimeout(() => {
+        winFx.classList.remove("show");
+        winFx.hidden = true;
+        winFx.setAttribute("aria-hidden", "true");
+        winFx.classList.remove("fadeout");
+    }, 280);
 }
 
 function onWin() {
@@ -1233,6 +1188,9 @@ function onWin() {
     const timeSec = Math.floor(state.elapsed);
     const mistakes = state.mistakes;
     const isDaily = state.mode === "daily";
+
+    // ✅ YOU WON overlay + sparkles + haptic
+    showWinFx({ isDaily, timeSec, mistakes });
 
     updateProfileAfterGame({ won: true, timeSec, mistakes, diff: state.diff, isDaily });
 
@@ -1248,29 +1206,24 @@ function onWin() {
     winBody.textContent =
         `Time: ${formatTime(timeSec)}\nMistakes: ${mistakes}\nDifficulty: ${state.diff}${isDaily ? `\nDate: ${state.dailyDate}` : ""}`;
 
-    const bannerTitle = isDaily ? "DAILY CLEARED!" : "YOU WON!";
-    playWinFX({ title: bannerTitle, timeSec, mistakes, mode: isDaily ? "daily" : "normal" });
-
     openWin();
     render();
     saveState();
 }
 
-/* --------------------- Timer (stable, prevents background drift) --------------------- */
 let timerHandle = null;
 function startTimerLoop() {
     if (timerHandle) cancelAnimationFrame(timerHandle);
-
-    let lastTs = nowMs();
-
+    state.startTs = nowMs();
     function tick() {
-        const t = nowMs();
         if (state.running) {
-            const dt = (t - lastTs) / 1000;
-            if (dt < 1) state.elapsed += dt;
+            const t = nowMs();
+            state.elapsed = state.elapsed + (t - state.startTs) / 1000;
+            state.startTs = t;
             pillTimer.textContent = formatTime(state.elapsed);
+        } else {
+            state.startTs = nowMs();
         }
-        lastTs = t;
         timerHandle = requestAnimationFrame(tick);
     }
     timerHandle = requestAnimationFrame(tick);
@@ -1279,6 +1232,7 @@ function startTimerLoop() {
 /* --------------------- New game / Daily --------------------- */
 function startNewGame(modeOrDiff) {
     closeWin();
+    hideWinFx(true);
     state.dailyDate = null;
 
     let mode = "manual";
@@ -1316,6 +1270,7 @@ function startNewGame(modeOrDiff) {
 
         state.elapsed = 0;
         state.running = true;
+        state.startTs = nowMs();
 
         setPerfectMobileFitCellSize();
         render(); saveState();
@@ -1324,6 +1279,7 @@ function startNewGame(modeOrDiff) {
 
 function startDailyChallenge(dateStr = todayKey()) {
     closeWin();
+    hideWinFx(true);
 
     const seedStr = `daily:${dateStr}:ultimate-sudoku`;
     const seedFn = xmur3(seedStr);
@@ -1353,6 +1309,7 @@ function startDailyChallenge(dateStr = todayKey()) {
 
         state.elapsed = 0;
         state.running = true;
+        state.startTs = nowMs();
 
         setPerfectMobileFitCellSize();
         render(); saveState();
@@ -1362,19 +1319,16 @@ function startDailyChallenge(dateStr = todayKey()) {
 /* --------------------- Sheet / Modal --------------------- */
 function openSheet() {
     sheetBackdrop.hidden = false;
-    sheet.hidden = false;
     sheet.classList.add("open");
     sheet.setAttribute("aria-hidden", "false");
 }
 function closeSheet() {
     sheet.classList.remove("open");
     sheet.setAttribute("aria-hidden", "true");
-    setTimeout(() => { sheetBackdrop.hidden = true; sheet.hidden = true; }, 180);
+    setTimeout(() => { sheetBackdrop.hidden = true; }, 180);
 }
 function toggleSheet() {
-    if (!modalWin.hidden) return;
-    if (sheet.classList.contains("open")) closeSheet();
-    else openSheet();
+    if (sheet.classList.contains("open")) closeSheet(); else openSheet();
 }
 
 function openWin() {
@@ -1390,19 +1344,16 @@ function closeWin() {
 (function sheetSwipe() {
     let startY = 0;
     let dragging = false;
-
     sheetHandle.addEventListener("pointerdown", (e) => {
         dragging = true;
         startY = e.clientY;
         sheetHandle.setPointerCapture(e.pointerId);
     });
-
     sheetHandle.addEventListener("pointermove", (e) => {
         if (!dragging) return;
         const dy = e.clientY - startY;
         if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
     });
-
     sheetHandle.addEventListener("pointerup", (e) => {
         dragging = false;
         sheet.style.transform = "";
@@ -1422,7 +1373,6 @@ btnDaily.addEventListener("click", () => startDailyChallenge(todayKey()));
 menuDaily.addEventListener("click", () => { closeSheet(); startDailyChallenge(todayKey()); });
 
 sheetBackdrop.addEventListener("click", closeSheet);
-
 sheet.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-new]");
     if (!btn) return;
@@ -1438,7 +1388,7 @@ btnRestart.addEventListener("click", restartPuzzle);
 
 btnPause.addEventListener("click", () => {
     state.running = !state.running;
-    statusText.textContent = state.running ? "Resumed." : "Paused — tap Resume.";
+    if (state.running) state.startTs = nowMs();
     render(); saveState();
 });
 
@@ -1461,20 +1411,20 @@ btnResetStats.addEventListener("click", () => {
     render();
 });
 
-btnCloseWin.addEventListener("click", closeWin);
+btnCloseWin.addEventListener("click", () => { closeWin(); });
 btnNextSmart.addEventListener("click", () => { closeWin(); startNewGame("smart"); });
-modalBackdrop.addEventListener("click", closeWin);
+modalBackdrop.addEventListener("click", () => { closeWin(); });
 
 window.addEventListener("resize", () => {
     setPerfectMobileFitCellSize();
     updateApkButtonVisibility();
-    resizeFxCanvas();
+    resizeWinCanvas();
     render();
 });
 window.visualViewport?.addEventListener("resize", () => {
     setPerfectMobileFitCellSize();
     updateApkButtonVisibility();
-    resizeFxCanvas();
+    resizeWinCanvas();
     render();
 });
 
@@ -1485,7 +1435,7 @@ function ensureState() {
 
     setPerfectMobileFitCellSize();
     updateApkButtonVisibility();
-    resizeFxCanvas();
+    resizeWinCanvas();
 
     const ok = loadState();
     if (!ok || !state.puzzle || state.puzzle.length !== 81) {
@@ -1499,7 +1449,6 @@ function ensureState() {
         render();
         setPerfectMobileFitCellSize();
         updateApkButtonVisibility();
-        resizeFxCanvas();
         render();
     }
 
