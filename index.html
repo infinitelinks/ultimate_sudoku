@@ -11,12 +11,9 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
 
-    <!-- iOS basics -->
+    <!-- iOS basic -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Ultimate Sudoku">
-    <link rel="apple-touch-icon" href="./icon-192.png" />
-    <meta name="mobile-web-app-capable" content="yes">
 
     <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -35,8 +32,7 @@
             <div class="top-actions">
                 <button class="btn" id="btnDaily" type="button">Daily</button>
                 <button class="btn" id="btnNew" type="button">New</button>
-                <button class="btn ghost" id="btnMenu" type="button" aria-haspopup="dialog"
-                    aria-controls="sheet">Menu</button>
+                <button class="btn ghost" id="btnMenu" type="button">Menu</button>
             </div>
         </header>
 
@@ -96,7 +92,7 @@
 
     <!-- Bottom sheet -->
     <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
-    <div class="sheet" id="sheet" hidden aria-hidden="true" role="dialog" aria-label="Menu">
+    <div class="sheet" id="sheet" aria-hidden="true">
         <div class="sheet-handle" id="sheetHandle"></div>
         <div class="sheet-content">
             <div class="sheet-title">Menu</div>
@@ -113,7 +109,7 @@
                 <div class="hint">Smart mode adapts using solve time + mistakes. Daily Challenge works fully offline.
                 </div>
 
-                <!-- APK download (Android mobile only, hides when PWA installed or already clicked) -->
+                <!-- APK download (mobile only) -->
                 <div style="margin-top:12px">
                     <button class="btn" id="btnDownloadApk" type="button" style="display:none">
                         Download Android App (APK)
@@ -130,7 +126,12 @@
                 <div class="grid-2">
                     <button class="btn" id="btnClearNotes" type="button">Clear notes</button>
                     <button class="btn" id="btnClearAll" type="button">Clear all user input</button>
+
+                    <!-- ✅ NEW: Sound toggle -->
+                    <button class="btn" id="btnSound" type="button">Sound: On</button>
+                    <div></div>
                 </div>
+                <div class="hint">Sound is generated locally (no files) and works offline.</div>
             </div>
 
             <div class="sheet-group">
@@ -159,34 +160,22 @@
         </div>
     </div>
 
-    <!-- FX layer -->
-    <canvas id="fxCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:9999;"></canvas>
-
-    <!-- Big center win banner -->
-    <div id="winBanner" class="win-banner" hidden>
-        <div class="win-banner-title" id="winBannerTitle">YOU WON!</div>
-        <div class="win-banner-sub" id="winBannerSub">Time: 00:00 • Mistakes: 0</div>
+    <!-- ✅ YOU WON overlay -->
+    <div class="winfx" id="winFx" hidden aria-hidden="true">
+        <canvas class="winfx-canvas" id="winFxCanvas"></canvas>
+        <div class="winfx-center">
+            <div class="winfx-banner" id="winFxBanner"></div>
+            <div class="winfx-sub" id="winFxSub"></div>
+        </div>
     </div>
 
     <script>
-        window.__PWA_INSTALLED__ =
-            window.matchMedia("(display-mode: standalone)").matches ||
-            window.matchMedia("(display-mode: fullscreen)").matches ||
-            window.navigator.standalone === true;
-
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", async () => {
-                try {
-                    await navigator.serviceWorker.register("./sw.js", { scope: "./" });
-                } catch (e) {
-                    console.log("SW register failed:", e);
-                }
+                try { await navigator.serviceWorker.register("./sw.js", { scope: "./" }); }
+                catch (e) { console.log("SW register failed:", e); }
             });
         }
-
-        window.addEventListener("appinstalled", () => {
-            window.__PWA_INSTALLED__ = true;
-        });
     </script>
 
     <script defer src="./app.js"></script>
