@@ -1,4 +1,5 @@
-const CACHE_NAME = "ultimate-sudoku-v2";
+const CACHE_NAME = "ultimate-sudoku-v3";
+
 const APP_SHELL = [
     "./",
     "./index.html",
@@ -7,32 +8,69 @@ const APP_SHELL = [
     "./manifest.webmanifest",
     "./icon.svg",
     "./icon-192.png",
-    "./icon-512.png",
-    "./Ultimate_Sudoku.apk"
+    "./icon-512.png"
+    // NOTE: APK is intentionally NOT in precache to avoid install failures on some hosts.
+    // It will still be cached on demand after the first download.
 ];
 
+async function safePrecache(cache, urls) {
+    await Promise.allSettled(urls.map((u) => cache.add(u)));
+}
+
 self.addEventListener("install", (event) => {
-    event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then((cache) => cache.addAll(APP_SHELL))
-            .then(() => self.skipWaiting())
-    );
+    event.waitUntil((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        await safePrecache(cache, APP_SHELL);
+        await self.skipWaiting();
+    })());
 });
 
 self.addEventListener("activate", (event) => {
-    event.waitUntil(
-        Promise.all([
-            caches.keys().then((keys) =>
-                Promise.all(keys.map((k) => (k === CACHE_NAME ? null : caches.delete(k))))
-            ),
-            self.clients.claim()
-        ])
-    );
+    event.waitUntil((async () => {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => (k === CACHE_NAME ? null : caches.delete(k))));
+        await self.clients.claim();
+    })());
 });
 
 function isNavigationRequest(request) {
-    return request.mode === "navigate" ||
-        (request.headers.get("accept") || "").includes("text/html");
+    return (
+        request.mode === "navigate" ||
+        (request.headers.get("accept") || "").includes("text/html")
+    );
+}
+
+async function networkFirstHTML(req) {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+        const fresh = await fetch(req);
+        cache.put("./", fresh.clone());
+        cache.put("./index.html", fresh.clone());
+        return fresh;
+    } catch {
+        return (
+            (await cache.match(req, { ignoreSearch: true })) ||
+            (await cache.match("./", { ignoreSearch: true })) ||
+            (await cache.match("./index.html", { ignoreSearch: true })) ||
+            Response.error()
+        );
+    }
+}
+
+async function cacheFirstAssets(req) {
+    const cached = await caches.match(req);
+    if (cached) return cached;
+
+    try {
+        const res = await fetch(req);
+        if (res && res.ok && res.type === "basic") {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(req, res.clone());
+        }
+        return res;
+    } catch {
+        return cached || Response.error();
+    }
 }
 
 self.addEventListener("fetch", (event) => {
@@ -42,37 +80,9 @@ self.addEventListener("fetch", (event) => {
     if (url.origin !== self.location.origin) return;
 
     if (isNavigationRequest(req)) {
-        event.respondWith(
-            (async () => {
-                try {
-                    const fresh = await fetch(req);
-                    const cache = await caches.open(CACHE_NAME);
-                    cache.put("./index.html", fresh.clone());
-                    return fresh;
-                } catch {
-                    const cache = await caches.open(CACHE_NAME);
-                    return (await cache.match("./index.html")) || Response.error();
-                }
-            })()
-        );
+        event.respondWith(networkFirstHTML(req));
         return;
     }
 
-    event.respondWith(
-        (async () => {
-            const cached = await caches.match(req);
-            if (cached) return cached;
-
-            try {
-                const res = await fetch(req);
-                if (res && res.ok && res.type === "basic") {
-                    const cache = await caches.open(CACHE_NAME);
-                    cache.put(req, res.clone());
-                }
-                return res;
-            } catch {
-                return cached || Response.error();
-            }
-        })()
-    );
+    event.respondWith(cacheFirstAssets(req));
 });

@@ -1,10 +1,11 @@
 /* Ultimate Sudoku PWA
-   - Offline
+   - Offline (Service Worker)
    - System theme (CSS)
    - Adaptive generator (Smart)
    - Daily Challenge (seeded per date, offline)
    - Mobile fit: board-first sizing so Sudoku always fully visible
-   - APK download button (mobile-only, hides when installed / already clicked)
+   - APK download button (Android mobile-only, hides when installed / already clicked)
+   - Win FX: confetti + theme-matched per-letter sparkles + banner + haptic + sound
 */
 
 const $ = (s) => document.querySelector(s);
@@ -51,40 +52,49 @@ const winBody = $("#winBody");
 const btnCloseWin = $("#btnCloseWin");
 const btnNextSmart = $("#btnNextSmart");
 
-// ✅ APK download UI
+// APK download UI
 const btnDownloadApk = $("#btnDownloadApk");
 const apkHint = $("#apkHint");
+
+// FX DOM
+const boardCardEl = document.querySelector(".board-card");
+const fxCanvas = document.getElementById("fxCanvas");
+const fxCtx = fxCanvas ? fxCanvas.getContext("2d") : null;
+
+const winBanner = document.getElementById("winBanner");
+const winBannerTitle = document.getElementById("winBannerTitle");
+const winBannerSub = document.getElementById("winBannerSub");
 
 const LS_KEY = "ultimate_sudoku_state_v2";
 const STATS_KEY = "ultimate_sudoku_stats_v2";
 const DAILY_KEY = "ultimate_sudoku_daily_v1";
 
-/* --------------------- APK download (mobile only, auto-hide) --------------------- */
-function isMobileBrowser() {
+/* --------------------- APK download (Android mobile only, auto-hide) --------------------- */
+function isMobileBrowserAndroid() {
     const w = window.visualViewport?.width ?? window.innerWidth;
     const ua = navigator.userAgent || "";
     const touch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
-    const phoneUA = /Android|iPhone|iPad|iPod/i.test(ua);
-    return (w <= 980) && touch && phoneUA;
+    const isAndroid = /Android/i.test(ua);
+    return (w <= 980) && touch && isAndroid;
 }
 function isStandalonePWA() {
-    return window.matchMedia?.("(display-mode: standalone)")?.matches || (navigator.standalone === true);
+    return window.__PWA_INSTALLED__ === true ||
+        window.matchMedia?.("(display-mode: standalone)")?.matches ||
+        (navigator.standalone === true);
 }
 function apkAlreadyClicked() {
     return localStorage.getItem("ultimate_sudoku_apk_downloaded") === "1";
 }
 function updateApkButtonVisibility() {
     if (!btnDownloadApk) return;
-    const shouldShow = isMobileBrowser() && !isStandalonePWA() && !apkAlreadyClicked();
+    const shouldShow = isMobileBrowserAndroid() && !isStandalonePWA() && !apkAlreadyClicked();
     btnDownloadApk.style.display = shouldShow ? "inline-flex" : "none";
     if (apkHint) apkHint.style.display = shouldShow ? "block" : "none";
 }
-
 if (btnDownloadApk) {
     btnDownloadApk.addEventListener("click", () => {
         localStorage.setItem("ultimate_sudoku_apk_downloaded", "1");
         updateApkButtonVisibility();
-        // Start download (file must exist in same folder)
         window.location.href = "./Ultimate_Sudoku.apk";
     });
 }
@@ -285,6 +295,19 @@ function statsText() {
         `Smart next: ${pickSmartDifficulty()}`
     ].join("\n");
 }
+
+function loadDailyState() {
+    try {
+        const raw = localStorage.getItem(DAILY_KEY);
+        if (!raw) return { history: {} };
+        const d = JSON.parse(raw);
+        if (!d.history) d.history = {};
+        return d;
+    } catch {
+        return { history: {} };
+    }
+}
+function saveDailyState(d) { localStorage.setItem(DAILY_KEY, JSON.stringify(d)); }
 
 function dailyText() {
     const s = loadStats();
@@ -536,20 +559,6 @@ function generatePuzzle(targetBand, rnd = Math.random) {
     return { puzzle: best.puzzle, solution, meta: { targetBand, rating: best.rating } };
 }
 
-/* --------------------- Daily storage --------------------- */
-function loadDailyState() {
-    try {
-        const raw = localStorage.getItem(DAILY_KEY);
-        if (!raw) return { history: {} };
-        const d = JSON.parse(raw);
-        if (!d.history) d.history = {};
-        return d;
-    } catch {
-        return { history: {} };
-    }
-}
-function saveDailyState(d) { localStorage.setItem(DAILY_KEY, JSON.stringify(d)); }
-
 /* --------------------- Game state --------------------- */
 let state = {
     mode: "smart",
@@ -564,7 +573,6 @@ let state = {
     selected: -1,
     conflictsOn: true,
     autoNotes: false,
-    startTs: 0,
     elapsed: 0,
     running: true,
     mistakes: 0,
@@ -617,6 +625,14 @@ function buildBoard() {
 
         boardEl.appendChild(cell);
     }
+}
+function moveSel(delta) {
+    if (state.selected < 0) return;
+    let next = state.selected + delta;
+    if (next < 0) next = 0;
+    if (next > 80) next = 80;
+    state.selected = next;
+    render(); saveState();
 }
 
 function buildKeypad() {
@@ -755,7 +771,7 @@ function render() {
     toggleConflicts.checked = state.conflictsOn;
     toggleAutoNotes.checked = state.autoNotes;
 
-    if (!state.running) statusText.textContent = "Paused.";
+    if (!state.running) statusText.textContent = "Paused — tap Resume.";
     else if (state.selected < 0) statusText.textContent = "Tap a cell to begin.";
     else statusText.textContent = state.notesMode ? "Notes mode: tap numbers to add/remove." : "Enter a number.";
 
@@ -805,8 +821,13 @@ function setValue(n) {
         const s = state.notes[i];
         if (s.has(n)) s.delete(n); else s.add(n);
     } else {
+        const prev = state.userGrid[i];
         state.userGrid[i] = n;
-        if (state.solution[i] !== 0 && n !== state.solution[i]) state.mistakes += 1;
+
+        if (state.solution[i] !== 0 && n !== state.solution[i] && prev !== n) {
+            state.mistakes += 1;
+        }
+
         if (state.autoNotes) {
             clearNoteInPeers(i, n);
             state.notes[i].clear();
@@ -859,7 +880,6 @@ function restartPuzzle() {
     state.notes = Array.from({ length: 81 }, () => new Set());
     state.mistakes = 0;
     state.elapsed = 0;
-    state.startTs = nowMs();
     state.running = true;
     closeWin();
     if (state.autoNotes) recomputeAutoNotes();
@@ -887,6 +907,327 @@ function isSolvedCorrect() {
     }
     return true;
 }
+
+/* --------------------- FX: banner, confetti, sparkles, sound, haptic --------------------- */
+function resizeFxCanvas() {
+    if (!fxCanvas || !fxCtx) return;
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    fxCanvas.width = Math.floor(window.innerWidth * dpr);
+    fxCanvas.height = Math.floor(window.innerHeight * dpr);
+    fxCanvas.style.width = window.innerWidth + "px";
+    fxCanvas.style.height = window.innerHeight + "px";
+    fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+let fxRaf = null;
+let fxParticles = [];
+
+function fxEnsureLoop() {
+    if (fxRaf) return;
+
+    function step() {
+        if (!fxCanvas || !fxCtx) { fxRaf = null; return; }
+
+        if (!fxParticles.length) {
+            fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+            fxRaf = null;
+            return;
+        }
+
+        fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+        const alive = [];
+        for (const p of fxParticles) {
+            p.life++;
+            if (p.life > p.ttl) continue;
+
+            p.vx *= p.drag;
+            p.vy = p.vy * p.drag + p.g;
+
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.rot != null) p.rot += p.vr;
+
+            const t = 1 - (p.life / p.ttl);
+            fxCtx.globalAlpha = Math.max(0, Math.min(1, t)) * (p.a ?? 1);
+
+            if (p.kind === "confetti") {
+                fxCtx.save();
+                fxCtx.translate(p.x, p.y);
+                fxCtx.rotate(p.rot || 0);
+                fxCtx.fillStyle = p.c;
+                fxCtx.fillRect(-p.r, -p.r * 0.55, p.r * 2.2, p.r * 1.1);
+                fxCtx.restore();
+            } else if (p.kind === "sparkle") {
+                fxCtx.save();
+                fxCtx.translate(p.x, p.y);
+                fxCtx.rotate(p.rot || 0);
+                fxCtx.fillStyle = p.c;
+                drawStar(fxCtx, 0, 0, p.r, p.r * 0.55, 4);
+                fxCtx.restore();
+            }
+
+            alive.push(p);
+        }
+
+        fxCtx.globalAlpha = 1;
+        fxParticles = alive;
+        fxRaf = requestAnimationFrame(step);
+    }
+
+    fxRaf = requestAnimationFrame(step);
+}
+
+function drawStar(ctx, x, y, outerR, innerR, points = 4) {
+    const step = Math.PI / points;
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+        const r = (i % 2 === 0) ? outerR : innerR;
+        const a = i * step;
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+}
+
+function colorMixRGBA(color, a) {
+    color = (color || "").trim();
+    if (color.startsWith("#")) {
+        let hex = color.slice(1);
+        if (hex.length === 3) hex = hex.split("").map(ch => ch + ch).join("");
+        const n = parseInt(hex, 16);
+        const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+        return `rgba(${r},${g},${b},${a})`;
+    }
+    if (color.startsWith("rgb")) {
+        const nums = color.match(/[\d.]+/g)?.map(Number) || [255, 255, 255];
+        const r = nums[0] ?? 255, g = nums[1] ?? 255, b = nums[2] ?? 255;
+        return `rgba(${r},${g},${b},${a})`;
+    }
+    return `rgba(255,255,255,${a})`;
+}
+
+function getThemePalette(mode) {
+    const root = getComputedStyle(document.documentElement);
+    const accent = root.getPropertyValue("--accent").trim() || "#7c5cff";
+    const accent2 = root.getPropertyValue("--accent2").trim() || "#2ee59d";
+    const text = root.getPropertyValue("--text").trim() || "#e9eefc";
+    const light = window.matchMedia?.("(prefers-color-scheme: light)")?.matches;
+
+    if (mode === "daily") {
+        return light
+            ? ["rgba(79,70,229,0.85)", "rgba(5,150,105,0.85)", "rgba(245,158,11,0.85)", "rgba(255,255,255,0.90)"]
+            : [colorMixRGBA(accent, 0.85), colorMixRGBA(accent2, 0.85), "rgba(255,214,110,0.90)", "rgba(255,255,255,0.90)"];
+    }
+
+    return light
+        ? ["rgba(79,70,229,0.85)", "rgba(5,150,105,0.85)", "rgba(17,24,39,0.35)", "rgba(255,255,255,0.90)"]
+        : [colorMixRGBA(accent, 0.90), colorMixRGBA(accent2, 0.90), colorMixRGBA(text, 0.45), "rgba(255,255,255,0.90)"];
+}
+
+function confettiBurst(mode) {
+    if (!fxCanvas || !fxCtx) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+
+    resizeFxCanvas();
+    const W = window.innerWidth, H = window.innerHeight;
+    const originX = W * 0.5;
+    const originY = H * 0.35;
+
+    const energetic = (mode === "daily");
+    const count = energetic ? Math.min(280, Math.max(160, Math.floor(W / 4)))
+        : Math.min(220, Math.max(120, Math.floor(W / 5)));
+
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speedBase = energetic ? 4.4 : 3.6;
+        const speed = speedBase + Math.random() * (energetic ? 7.4 : 6.2);
+
+        fxParticles.push({
+            kind: "confetti",
+            x: originX,
+            y: originY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - (energetic ? 3.2 : 2.6),
+            r: 2 + Math.random() * 4,
+            rot: Math.random() * Math.PI,
+            vr: (Math.random() - 0.5) * 0.28,
+            life: 0,
+            ttl: energetic ? (85 + Math.random() * 50) : (75 + Math.random() * 45),
+            a: 1,
+            g: energetic ? 0.18 : 0.16,
+            drag: 0.995,
+            c: `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`
+        });
+    }
+
+    fxEnsureLoop();
+}
+
+function setTitleAsSpans(el, text) {
+    el.innerHTML = "";
+    for (const ch of text) {
+        const s = document.createElement("span");
+        s.textContent = ch === " " ? "\u00A0" : ch;
+        s.style.display = "inline-block";
+        el.appendChild(s);
+    }
+}
+
+function letterSparkles({ titleEl, subEl, mode }) {
+    if (!fxCanvas || !fxCtx || !titleEl) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+
+    resizeFxCanvas();
+    const palette = getThemePalette(mode);
+
+    const perLetter = (mode === "daily") ? 6 : 4;
+    const ttlBase = (mode === "daily") ? 44 : 40;
+    const drift = (mode === "daily") ? 1.25 : 1.05;
+
+    const letters = Array.from(titleEl.querySelectorAll("span"));
+
+    letters.forEach((span, i) => {
+        const r = span.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height * 0.72;
+
+        setTimeout(() => {
+            for (let k = 0; k < perLetter; k++) {
+                fxParticles.push({
+                    kind: "sparkle",
+                    x: cx + (Math.random() - 0.5) * 10,
+                    y: cy + (Math.random() - 0.5) * 8,
+                    vx: (Math.random() - 0.5) * 0.55,
+                    vy: (-0.9 - Math.random() * 1.4) * drift,
+                    r: 1.6 + Math.random() * 2.6,
+                    rot: Math.random() * Math.PI,
+                    vr: (Math.random() - 0.5) * 0.22,
+                    life: 0,
+                    ttl: ttlBase + Math.random() * 24,
+                    a: 0.9,
+                    g: 0.03,
+                    drag: 0.992,
+                    c: palette[Math.floor(Math.random() * palette.length)]
+                });
+            }
+            fxEnsureLoop();
+        }, i * (260 / Math.max(1, letters.length)));
+    });
+
+    if (subEl) {
+        setTimeout(() => {
+            const rs = subEl.getBoundingClientRect();
+            const cx = rs.left + rs.width / 2;
+            const cy = rs.top + rs.height * 0.6;
+
+            const extra = (mode === "daily") ? 26 : 18;
+            for (let k = 0; k < extra; k++) {
+                fxParticles.push({
+                    kind: "sparkle",
+                    x: cx + (Math.random() - 0.5) * Math.min(220, rs.width),
+                    y: cy + (Math.random() - 0.5) * 12,
+                    vx: (Math.random() - 0.5) * 0.45,
+                    vy: (-0.7 - Math.random() * 1.0) * drift,
+                    r: 1.2 + Math.random() * 2.1,
+                    rot: Math.random() * Math.PI,
+                    vr: (Math.random() - 0.5) * 0.18,
+                    life: 0,
+                    ttl: 34 + Math.random() * 22,
+                    a: 0.75,
+                    g: 0.02,
+                    drag: 0.993,
+                    c: palette[Math.floor(Math.random() * palette.length)]
+                });
+            }
+            fxEnsureLoop();
+        }, 220);
+    }
+}
+
+function showWinBanner({ title = "YOU WON!", timeSec = 0, mistakes = 0, mode = "normal" } = {}) {
+    if (!winBanner || !winBannerTitle || !winBannerSub) return;
+
+    setTitleAsSpans(winBannerTitle, title);
+    winBannerSub.textContent = `Time: ${formatTime(timeSec)} • Mistakes: ${mistakes}`;
+
+    winBanner.hidden = false;
+    winBanner.classList.remove("show");
+    void winBanner.offsetWidth;
+    winBanner.classList.add("show");
+
+    requestAnimationFrame(() => {
+        letterSparkles({ titleEl: winBannerTitle, subEl: winBannerSub, mode });
+    });
+
+    setTimeout(() => {
+        winBanner.classList.remove("show");
+        winBanner.hidden = true;
+    }, 1200);
+}
+
+function tryHapticWin() {
+    try {
+        if (!("vibrate" in navigator)) return;
+        if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+        navigator.vibrate([18, 25, 18]);
+    } catch { }
+}
+
+function victorySound() {
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        const ctx = new AC();
+
+        const master = ctx.createGain();
+        master.gain.value = 0.12;
+        master.connect(ctx.destination);
+
+        const now = ctx.currentTime;
+        const tones = [
+            { f: 523.25, t: 0.00 },
+            { f: 659.25, t: 0.10 },
+            { f: 783.99, t: 0.20 },
+            { f: 1046.50, t: 0.32 }
+        ];
+
+        tones.forEach(({ f, t }) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(f, now + t);
+
+            gain.gain.setValueAtTime(0.0001, now + t);
+            gain.gain.exponentialRampToValueAtTime(0.9, now + t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.14);
+
+            osc.connect(gain);
+            gain.connect(master);
+
+            osc.start(now + t);
+            osc.stop(now + t + 0.16);
+        });
+
+        setTimeout(() => ctx.close?.(), 900);
+    } catch { }
+}
+
+function playWinFX({ title, timeSec, mistakes, mode = "normal" } = {}) {
+    if (boardCardEl) {
+        boardCardEl.classList.remove("winfx");
+        void boardCardEl.offsetWidth;
+        boardCardEl.classList.add("winfx");
+    }
+    modalWin.classList.add("winfx");
+
+    confettiBurst(mode);
+    victorySound();
+    showWinBanner({ title, timeSec, mistakes, mode });
+    tryHapticWin();
+}
+
 function onWin() {
     state.running = false;
     const timeSec = Math.floor(state.elapsed);
@@ -907,24 +1248,29 @@ function onWin() {
     winBody.textContent =
         `Time: ${formatTime(timeSec)}\nMistakes: ${mistakes}\nDifficulty: ${state.diff}${isDaily ? `\nDate: ${state.dailyDate}` : ""}`;
 
+    const bannerTitle = isDaily ? "DAILY CLEARED!" : "YOU WON!";
+    playWinFX({ title: bannerTitle, timeSec, mistakes, mode: isDaily ? "daily" : "normal" });
+
     openWin();
     render();
     saveState();
 }
 
+/* --------------------- Timer (stable, prevents background drift) --------------------- */
 let timerHandle = null;
 function startTimerLoop() {
     if (timerHandle) cancelAnimationFrame(timerHandle);
-    state.startTs = nowMs();
+
+    let lastTs = nowMs();
+
     function tick() {
+        const t = nowMs();
         if (state.running) {
-            const t = nowMs();
-            state.elapsed = state.elapsed + (t - state.startTs) / 1000;
-            state.startTs = t;
+            const dt = (t - lastTs) / 1000;
+            if (dt < 1) state.elapsed += dt;
             pillTimer.textContent = formatTime(state.elapsed);
-        } else {
-            state.startTs = nowMs();
         }
+        lastTs = t;
         timerHandle = requestAnimationFrame(tick);
     }
     timerHandle = requestAnimationFrame(tick);
@@ -970,10 +1316,6 @@ function startNewGame(modeOrDiff) {
 
         state.elapsed = 0;
         state.running = true;
-        state.startTs = nowMs();
-
-        setPerfectMobileFitCellSize();
-        render(); saveState();
 
         setPerfectMobileFitCellSize();
         render(); saveState();
@@ -1011,10 +1353,6 @@ function startDailyChallenge(dateStr = todayKey()) {
 
         state.elapsed = 0;
         state.running = true;
-        state.startTs = nowMs();
-
-        setPerfectMobileFitCellSize();
-        render(); saveState();
 
         setPerfectMobileFitCellSize();
         render(); saveState();
@@ -1024,16 +1362,19 @@ function startDailyChallenge(dateStr = todayKey()) {
 /* --------------------- Sheet / Modal --------------------- */
 function openSheet() {
     sheetBackdrop.hidden = false;
+    sheet.hidden = false;
     sheet.classList.add("open");
     sheet.setAttribute("aria-hidden", "false");
 }
 function closeSheet() {
     sheet.classList.remove("open");
     sheet.setAttribute("aria-hidden", "true");
-    setTimeout(() => { sheetBackdrop.hidden = true; }, 180);
+    setTimeout(() => { sheetBackdrop.hidden = true; sheet.hidden = true; }, 180);
 }
 function toggleSheet() {
-    if (sheet.classList.contains("open")) closeSheet(); else openSheet();
+    if (!modalWin.hidden) return;
+    if (sheet.classList.contains("open")) closeSheet();
+    else openSheet();
 }
 
 function openWin() {
@@ -1049,16 +1390,19 @@ function closeWin() {
 (function sheetSwipe() {
     let startY = 0;
     let dragging = false;
+
     sheetHandle.addEventListener("pointerdown", (e) => {
         dragging = true;
         startY = e.clientY;
         sheetHandle.setPointerCapture(e.pointerId);
     });
+
     sheetHandle.addEventListener("pointermove", (e) => {
         if (!dragging) return;
         const dy = e.clientY - startY;
         if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
     });
+
     sheetHandle.addEventListener("pointerup", (e) => {
         dragging = false;
         sheet.style.transform = "";
@@ -1078,6 +1422,7 @@ btnDaily.addEventListener("click", () => startDailyChallenge(todayKey()));
 menuDaily.addEventListener("click", () => { closeSheet(); startDailyChallenge(todayKey()); });
 
 sheetBackdrop.addEventListener("click", closeSheet);
+
 sheet.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-new]");
     if (!btn) return;
@@ -1093,7 +1438,7 @@ btnRestart.addEventListener("click", restartPuzzle);
 
 btnPause.addEventListener("click", () => {
     state.running = !state.running;
-    if (state.running) state.startTs = nowMs();
+    statusText.textContent = state.running ? "Resumed." : "Paused — tap Resume.";
     render(); saveState();
 });
 
@@ -1120,8 +1465,18 @@ btnCloseWin.addEventListener("click", closeWin);
 btnNextSmart.addEventListener("click", () => { closeWin(); startNewGame("smart"); });
 modalBackdrop.addEventListener("click", closeWin);
 
-window.addEventListener("resize", () => { setPerfectMobileFitCellSize(); updateApkButtonVisibility(); render(); });
-window.visualViewport?.addEventListener("resize", () => { setPerfectMobileFitCellSize(); updateApkButtonVisibility(); render(); });
+window.addEventListener("resize", () => {
+    setPerfectMobileFitCellSize();
+    updateApkButtonVisibility();
+    resizeFxCanvas();
+    render();
+});
+window.visualViewport?.addEventListener("resize", () => {
+    setPerfectMobileFitCellSize();
+    updateApkButtonVisibility();
+    resizeFxCanvas();
+    render();
+});
 
 /* --------------------- Boot --------------------- */
 function ensureState() {
@@ -1130,6 +1485,7 @@ function ensureState() {
 
     setPerfectMobileFitCellSize();
     updateApkButtonVisibility();
+    resizeFxCanvas();
 
     const ok = loadState();
     if (!ok || !state.puzzle || state.puzzle.length !== 81) {
@@ -1141,9 +1497,9 @@ function ensureState() {
         state.notes = (state.notes || []).map(s => (s instanceof Set ? s : new Set(s)));
         if (state.notes.length !== 81) state.notes = Array.from({ length: 81 }, () => new Set());
         render();
-
         setPerfectMobileFitCellSize();
         updateApkButtonVisibility();
+        resizeFxCanvas();
         render();
     }
 
